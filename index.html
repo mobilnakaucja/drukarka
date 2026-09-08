@@ -235,25 +235,21 @@
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
       try {
-        // 1. Heartbeat / wybudzenie protokołu B3S
+        // 1. Heartbeat i konfiguracja
         await wyslijPakiet(stworzPakietNiimbot(0xDC, [0x01]));
+        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03])); // Zaczernienie
+        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01])); // Papier: etykieta z przerwą
 
-        // 2. Ustawienie typu papieru (1 = etykieta z przerwą) i zaczernienia (3)
-        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03]));
-        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01]));
-
-        // 3. Start zadania drukowania (1 kopia)
+        // 2. Start zadania drukowania (1 strona)
         await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01]));
 
-        // 4. Start strony
+        // 3. Start strony i wymiary: 240 linii wys., 384 px szer.
         await wyslijPakiet(stworzPakietNiimbot(0x03, [0x01]));
-
-        // 5. Deklaracja wymiarów: 240 linii (wysokość), 384 px (szerokość)
         await wyslijPakiet(stworzPakietNiimbot(0x13, [0x00, 0xF0, 0x01, 0x80]));
         await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]));
 
-        // 6. Wysyłanie linii rastra: 240 linii po 48 bajtów (384 px)
-        const widthBytes = 48;
+        // 4. Wysyłanie rastra z prawidłowym nagłówkiem dla B3S
+        const widthBytes = 48; // 384 px / 8
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
@@ -267,22 +263,29 @@
             }
           }
 
-          // Format B3S: linia indeksowana (0x85) z numerem linii
-          let payload = [(y >> 8) & 0xFF, y & 0xFF, ...lineBytes];
+          // Poprawny nagłówek B3S: [nr_H, nr_L, powtórzenia=1, ...piksele]
+          let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
           await wyslijPakiet(stworzPakietNiimbot(0x85, payload));
+
+          // Drobna pauza co 10 linii, żeby bufor drukarki nadążał z wypalaniem
+          if (y % 10 === 0) {
+            await new Promise(r => setTimeout(r, 8));
+          }
         }
 
-        // 7. Koniec strony (0xE3) z flagą potwierdzenia
+        // 5. Koniec strony
         await wyslijPakiet(stworzPakietNiimbot(0xE3, [0x01]));
 
-        // 8. Zakończenie wydruku i wysunięcie etykiety (0xF3)
+        // 6. Koniec zadania druku
         await wyslijPakiet(stworzPakietNiimbot(0xF3, [0x01]));
+
+        // 7. Form Feed - komenda wysunięcia etykiety do czujnika przerwy (Gap)
+        await wyslijPakiet(stworzPakietNiimbot(0x0E, [0x01]));
 
       } catch (err) {
         alert("Błąd drukowania: " + err.message);
       }
     }
-
     window.onload = pobierzOstatniParagon;
   </script>
 </body>
