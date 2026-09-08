@@ -216,12 +216,18 @@
     }
 
     async function wyslijPakiet(packet) {
-      if (printCharacteristic.properties.writeWithoutResponse) {
-        await printCharacteristic.writeValueWithoutResponse(packet);
-      } else {
-        await printCharacteristic.writeValueWithResponse(packet);
+      // Dzielimy każdy pakiet na porcje do 20 bajtów (limit BLE MTU na telefonach)
+      const BLE_CHUNK = 20;
+      for (let offset = 0; offset < packet.length; offset += BLE_CHUNK) {
+        let chunk = packet.slice(offset, offset + BLE_CHUNK);
+        if (printCharacteristic.properties.writeWithoutResponse) {
+          await printCharacteristic.writeValueWithoutResponse(chunk);
+        } else {
+          await printCharacteristic.writeValueWithResponse(chunk);
+        }
+        await new Promise(r => setTimeout(r, 4));
       }
-      await new Promise(r => setTimeout(r, 12));
+      await new Promise(r => setTimeout(r, 6));
     }
 
     async function drukujEtykiete() {
@@ -235,21 +241,22 @@
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
       try {
-        // 1. Heartbeat i konfiguracja
+        // 1. Wybudzenie i przygotowanie
         await wyslijPakiet(stworzPakietNiimbot(0xDC, [0x01]));
-        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03])); // Zaczernienie
-        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01])); // Papier: etykieta z przerwą
+        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03])); // Zaczernienie (density 3)
+        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01])); // Typ papieru: etykieta z przerwą
 
-        // 2. Start zadania drukowania (1 strona)
-        await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01]));
+        // 2. Start zadania drukowania (0x01): [ilość stron wysoka, ilość niska, kopie wysoka, kopie niska]
+        await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01, 0x00, 0x01]));
 
-        // 3. Start strony i wymiary: 240 linii wys., 384 px szer.
+        // 3. Start strony (0x03)
         await wyslijPakiet(stworzPakietNiimbot(0x03, [0x01]));
-        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x00, 0xF0, 0x01, 0x80]));
-        await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]));
 
-        // 4. Wysyłanie rastra z prawidłowym nagłówkiem dla B3S
-        const widthBytes = 48; // 384 px / 8
+        // 4. Wymiary: 240 linii (wysokość), 384 punktów (szerokość)
+        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x00, 0xF0, 0x01, 0x80]));
+
+        // 5. Wysyłanie linii rastra
+        const widthBytes = 48; // 384 / 8
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
@@ -263,24 +270,16 @@
             }
           }
 
-          // Poprawny nagłówek B3S: [nr_H, nr_L, powtórzenia=1, ...piksele]
+          // Format komendy rastra dla B3S: [nr_linii_H, nr_linii_L, 0x01 (mnożnik), ...dane]
           let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
           await wyslijPakiet(stworzPakietNiimbot(0x85, payload));
-
-          // Drobna pauza co 10 linii, żeby bufor drukarki nadążał z wypalaniem
-          if (y % 10 === 0) {
-            await new Promise(r => setTimeout(r, 8));
-          }
         }
 
-        // 5. Koniec strony
+        // 6. Koniec strony
         await wyslijPakiet(stworzPakietNiimbot(0xE3, [0x01]));
 
-        // 6. Koniec zadania druku
+        // 7. Zakończenie druku
         await wyslijPakiet(stworzPakietNiimbot(0xF3, [0x01]));
-
-        // 7. Form Feed - komenda wysunięcia etykiety do czujnika przerwy (Gap)
-        await wyslijPakiet(stworzPakietNiimbot(0x0E, [0x01]));
 
       } catch (err) {
         alert("Błąd drukowania: " + err.message);
