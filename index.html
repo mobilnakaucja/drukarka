@@ -240,13 +240,12 @@
       }
     }
 
-    async function drukujEtykiete() {
+   async function drukujEtykiete() {
       if (!printCharacteristic) {
         alert("Najpierw połącz z drukarką!");
         return;
       }
 
-      // Jeśli canvas jest jeszcze pusty, upewnij się, że mamy narysowane cokolwiek
       const idDoDruku = currentId || document.getElementById('lblId').innerText;
       odrysujEtykiete(idDoDruku, currentDate, currentNote);
       await new Promise(r => setTimeout(r, 100));
@@ -271,13 +270,14 @@
         await wyslij(zbudujPakiet(0x03, [0x01]));
         await new Promise(r => setTimeout(r, 80));
 
-        // 4. Wysyłanie linii grafiki (240 linii po 48 bajtów)
-        logMsg("Wysyłanie 240 linii...");
+        // 4. Wysyłanie 240 linii z poprawnym nagłówkiem Niimbot
+        logMsg("Wysyłanie linii z licznikiem pikseli...");
         const widthBytes = 48; // 384 px / 8
-        let blackPixelsTotal = 0;
+        let totalBlack = 0;
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
+          let rowBlackCount = 0;
 
           for (let x = 0; x < 384; x++) {
             let idx = (y * 384 + x) * 4;
@@ -286,29 +286,37 @@
             let b = imgData[idx + 2];
             let a = imgData[idx + 3];
 
-            // Czarny piksel
-            let isBlack = (a > 128) && ((r + g + b) / 3 < 128);
-
-            if (isBlack) {
-              let byteIdx = Math.floor(x / 8);
-              lineBytes[byteIdx] |= (0x80 >> (x % 8));
-              blackPixelsTotal++;
+            if (a > 128 && ((r + g + b) / 3 < 128)) {
+              lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
+              rowBlackCount++;
             }
           }
 
-          // Pakiet linii: [nr_linii_H, nr_linii_L, ...piksele]
-          let payload = [(y >> 8) & 0xFF, y & 0xFF, ...lineBytes];
-          await wyslij(zbudujPakiet(0x85, payload));
+          totalBlack += rowBlackCount;
+
+          if (rowBlackCount === 0) {
+            // Pusta linia (0x84): [Nr_H, Nr_L, Powtórzenia=1]
+            let emptyPayload = [(y >> 8) & 0xFF, y & 0xFF, 0x01];
+            await wyslij(zbudujPakiet(0x84, emptyPayload));
+          } else {
+            // Pełna linia (0x85): [Nr_H, Nr_L, C1, C2, C3, Powtórzenia=1, ...dane]
+            // C1, C2, C3 to licznik czarnych pikseli w linii (Big Endian)
+            let c1 = (rowBlackCount >> 16) & 0xFF;
+            let c2 = (rowBlackCount >> 8) & 0xFF;
+            let c3 = rowBlackCount & 0xFF;
+            let linePayload = [(y >> 8) & 0xFF, y & 0xFF, c1, c2, c3, 0x01, ...lineBytes];
+            await wyslij(zbudujPakiet(0x85, linePayload));
+          }
 
           if (y % 40 === 0) {
             logMsg("Linia: " + y + "/240");
-            await new Promise(r => setTimeout(r, 8));
+            await new Promise(r => setTimeout(r, 10));
           } else {
             await new Promise(r => setTimeout(r, 2));
           }
         }
 
-        logMsg("Wysłano pikseli: " + blackPixelsTotal);
+        logMsg("Suma pikseli: " + totalBlack);
 
         // 5. Koniec strony
         logMsg("Zamykanie strony (0xE3)...");
@@ -318,9 +326,9 @@
         // 6. Koniec zadania i wysuw
         logMsg("Kończenie wydruku (0xF3)...");
         await wyslij(zbudujPakiet(0xF3, [0x01]));
-        
+
       } catch (err) {
-        logMsg("Błąd pętli druku: " + err.message);
+        logMsg("Błąd druku: " + err.message);
       }
     }
 
