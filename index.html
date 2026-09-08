@@ -100,7 +100,7 @@
       pobierzOstatniParagon();
     }
 
-    async function pobierzOstatniParagon() {
+    function pobierzOstatniParagon() {
       let url = localStorage.getItem("bb_url");
       let key = localStorage.getItem("bb_key");
       
@@ -109,11 +109,10 @@
         return;
       }
 
-      try {
-        let separator = url.indexOf('?') !== -1 ? '&' : '?';
-        let res = await fetch(url + separator + "key=" + encodeURIComponent(key));
-        let json = await res.json();
-        
+      let starySkrypt = document.getElementById("jsonp_script");
+      if (starySkrypt) starySkrypt.remove();
+
+      window.obsluzDaneParagonu = function(json) {
         if (json.status === "ok") {
           currentId = json.customId;
           currentDate = json.date;
@@ -124,11 +123,19 @@
         } else {
           document.getElementById('lblId').innerText = "Błąd: " + (json.message || "Brak autoryzacji");
         }
-      } catch (e) {
-        document.getElementById('lblId').innerText = "Błąd pobierania danych";
-      }
-    }
+      };
 
+      let separator = url.indexOf('?') !== -1 ? '&' : '?';
+      let fullUrl = url + separator + "key=" + encodeURIComponent(key) + "&callback=obsluzDaneParagonu&_ts=" + new Date().getTime();
+
+      let script = document.createElement("script");
+      script.id = "jsonp_script";
+      script.src = fullUrl;
+      script.onerror = function() {
+        document.getElementById('lblId').innerText = "Błąd sieci lub zły URL";
+      };
+      document.body.appendChild(script);
+    }
     async function polaczZNiimbot() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
