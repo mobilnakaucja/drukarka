@@ -19,6 +19,7 @@
     .btn-cfg { background: none; border: 1px dashed #94a3b8; color: #64748b; font-size: 12px; padding: 8px; }
     #previewCanvas { border: 2px dashed #94a3b8; background: white; margin-top: 10px; width: 100%; max-width: 320px; height: auto; }
     .info-box { font-size: 15px; color: #334155; margin: 8px 0; text-align: left; background: #f8fafc; padding: 10px; border-radius: 6px; }
+    #logOutput { font-size: 12px; color: #64748b; margin-top: 8px; min-height: 16px; }
   </style>
 </head>
 <body>
@@ -40,7 +41,8 @@
     
     <canvas id="previewCanvas" width="384" height="240"></canvas>
     
-    <button class="btn-print" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
+    <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
+    <div id="logOutput"></div>
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
 
@@ -50,11 +52,18 @@
     let currentId = "";
     let currentDate = "";
 
+    const CANVAS_WIDTH = 384;
+    const CANVAS_HEIGHT = 240;
+
+    function logStatus(text) {
+      document.getElementById('logOutput').innerText = text;
+    }
+
     function generujPodglad(idParagonu, dataParagonu, nrWorka) {
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, 384, 240);
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       if (!idParagonu || idParagonu === "Brak") {
         ctx.fillStyle = "#64748b";
@@ -153,8 +162,6 @@
       document.body.appendChild(script);
     }
 
-    let notifyCharacteristic = null;
-
     async function polaczZNiimbot() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
@@ -172,19 +179,20 @@
         try {
           service = await server.getPrimaryService("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
         } catch(e) {
-          service = await server.getPrimaryService(0xFFE0);
+          try {
+            service = await server.getPrimaryService(0xFFE0);
+          } catch(e2) {
+            service = await server.getPrimaryService(0xFEE7);
+          }
         }
 
         const characteristics = await service.getCharacteristics();
         printCharacteristic = null;
-        notifyCharacteristic = null;
 
         for (let char of characteristics) {
           if (char.properties.write || char.properties.writeWithoutResponse) {
             printCharacteristic = char;
-          }
-          if (char.properties.notify || char.properties.indicate) {
-            notifyCharacteristic = char;
+            break;
           }
         }
 
@@ -192,51 +200,40 @@
           printCharacteristic = characteristics[0];
         }
 
-        // Włączamy nasłuchiwanie odpowiedzi z drukarki (kluczowe dla B3S!)
-        if (notifyCharacteristic) {
-          await notifyCharacteristic.startNotifications();
-          notifyCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
-            // Odbieranie ACK z drukarki
-          });
-        }
-
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
         badge.className = "status-badge status-on";
-
-        alert("Połączono pomyślnie z " + bluetoothDevice.name);
+        logStatus("Połączono z drukarką.");
       } catch (err) {
         alert("Błąd połączenia: " + err.message);
       }
     }
 
-    function stworzPakietNiimbot(command, payload = []) {
-      let len = payload.length;
-      let packet = [0x55, 0x55, command, len];
-      packet.push(...payload);
-
-      let checksum = command ^ len;
-      for (let b of payload) {
-        checksum ^= b;
+    // Prawidłowe budowanie pakietu protokołu Niimbot
+    function zbudujPakiet(type, payload = []) {
+      const length = payload.length;
+      const raw = [0x55, 0x55, type, length, ...payload];
+      
+      let checksum = 0;
+      for (let i = 2; i < raw.length; i++) {
+        checksum ^= raw[i];
       }
-      packet.push(checksum & 0xFF);
-      packet.push(0xAA, 0xAA);
-      return new Uint8Array(packet);
+      
+      raw.push(checksum & 0xFF);
+      raw.push(0xAA, 0xAA);
+      return new Uint8Array(raw);
     }
 
-    async function wyslijPakiet(packet, waitMs = 8) {
-      const BLE_CHUNK = 20;
-      for (let offset = 0; offset < packet.length; offset += BLE_CHUNK) {
-        let chunk = packet.slice(offset, offset + BLE_CHUNK);
+    async function wyslij(packet) {
+      const CHUNK_SIZE = 100; // Większość urządzeń BLE przyjmuje paczki 20-128 bajtów
+      for (let i = 0; i < packet.length; i += CHUNK_SIZE) {
+        const chunk = packet.slice(i, i + CHUNK_SIZE);
         if (printCharacteristic.properties.writeWithoutResponse) {
           await printCharacteristic.writeValueWithoutResponse(chunk);
         } else {
           await printCharacteristic.writeValueWithResponse(chunk);
         }
-        await new Promise(r => setTimeout(r, 4));
-      }
-      if (waitMs > 0) {
-        await new Promise(r => setTimeout(r, waitMs));
+        await new Promise(r => setTimeout(r, 6));
       }
     }
 
@@ -246,60 +243,71 @@
         return;
       }
 
-      const canvas = document.getElementById('previewCanvas');
-      const ctx = canvas.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, 384, 240).data;
+      const btn = document.getElementById('btnPrint');
+      btn.disabled = true;
+      logStatus("Przygotowywanie danych druku...");
 
       try {
-        // 1. Ustawienie gęstości druku (0x21) i typu papieru (0x23: 1 = etykieta z przerwą)
-        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03]), 15);
-        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01]), 15);
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT).data;
 
-        // 2. Start zadania druku (0x01): 1 kopia
-        await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01]), 25);
+        // Inicjalizacja sesji druku
+        await wyslij(zbudujPakiet(0x01, [0x00, 0x01])); // Start print: 1 kopia
+        await new Promise(r => setTimeout(r, 50));
 
-        // 3. Początek strony (0x03)
-        await wyslijPakiet(stworzPakietNiimbot(0x03, [0x01]), 25);
+        await wyslij(zbudujPakiet(0x03, [0x01])); // Start page
+        await new Promise(r => setTimeout(r, 50));
 
-        // 4. Wymiary etykiety (0x13): w B3S/B21 najpierw szerokość w punktach (384 = 0x0180), potem linie (240 = 0x00F0)
-        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x01, 0x80, 0x00, 0xF0]), 20);
+        // Format wymiarów w standardzie Little Endian (Wysokość: 240, Szerokość: 384)
+        const hLow = CANVAS_HEIGHT & 0xFF;
+        const hHigh = (CANVAS_HEIGHT >> 8) & 0xFF;
+        const wLow = CANVAS_WIDTH & 0xFF;
+        const wHigh = (CANVAS_WIDTH >> 8) & 0xFF;
+        
+        await wyslij(zbudujPakiet(0x13, [hHigh, hLow, wHigh, wLow]));
+        await new Promise(r => setTimeout(r, 50));
 
-        // 5. Ilość kopii strony (0x15: 1)
-        await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]), 20);
+        const bytesPerLine = CANVAS_WIDTH / 8; // 48 bajtów
 
-        // 6. Przesyłanie rastra pikseli (384 px szerokości = 48 bajtów na linię)
-        const widthBytes = 48;
+        for (let y = 0; y < CANVAS_HEIGHT; y++) {
+          let line = new Uint8Array(bytesPerLine);
 
-        for (let y = 0; y < 240; y++) {
-          let lineBytes = new Uint8Array(widthBytes);
-
-          for (let x = 0; x < 384; x++) {
-            let idx = (y * 384 + x) * 4;
-            let avg = (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / 3;
-            if (avg < 128) {
-              let byteIdx = Math.floor(x / 8);
-              lineBytes[byteIdx] |= (0x80 >> (x % 8));
+          for (let x = 0; x < CANVAS_WIDTH; x++) {
+            let offset = (y * CANVAS_WIDTH + x) * 4;
+            // Sprawdzanie jasności piksela (czarny piksel = 1, biały = 0)
+            let brightness = (imgData[offset] + imgData[offset + 1] + imgData[offset + 2]) / 3;
+            if (brightness < 128) {
+              line[Math.floor(x / 8)] |= (0x80 >> (x % 8));
             }
           }
 
-          // Pakiet linii: [nr_H, nr_L, 0x01, ...bajty_linii]
-          let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
-          await wyslijPakiet(stworzPakietNiimbot(0x85, payload), 3);
+          // Pakiet linii: [nr_linii_MSB, nr_linii_LSB, powtórzenia=1, ...dane]
+          let lineHeader = [(y >> 8) & 0xFF, y & 0xFF, 0x01];
+          let linePayload = [...lineHeader, ...line];
+          await wyslij(zbudujPakiet(0x85, linePayload));
+
+          if (y % 30 === 0) {
+            logStatus(`Drukowanie: ${Math.round((y / CANVAS_HEIGHT) * 100)}%`);
+          }
         }
 
-        // 7. Koniec strony (0xE3)
-        await wyslijPakiet(stworzPakietNiimbot(0xE3, [0x01]), 40);
+        logStatus("Kończenie wydruku...");
+        await wyslij(zbudujPakiet(0xE3, [0x01])); // Koniec strony
+        await new Promise(r => setTimeout(r, 60));
 
-        // 8. Zakończenie zadania drukowania (0xF3)
-        await wyslijPakiet(stworzPakietNiimbot(0xF3, [0x01]), 50);
+        await wyslij(zbudujPakiet(0xF3, [0x01])); // Koniec zadania drukowania
+        await new Promise(r => setTimeout(r, 60));
 
-        // 9. Komenda wysunięcia etykiety do następnej przerwy (Form Feed: 0x0E)
-        await wyslijPakiet(stworzPakietNiimbot(0x0E, [0x01]), 20);
-
+        logStatus("Gotowe!");
       } catch (err) {
-        alert("Błąd drukowania: " + err.message);
+        logStatus("Błąd drukowania");
+        alert("Błąd podczas drukowania: " + err.message);
+      } finally {
+        btn.disabled = false;
       }
     }
+
     window.onload = pobierzOstatniParagon;
   </script>
 </body>
