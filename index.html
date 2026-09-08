@@ -54,6 +54,7 @@
     let notifyCharacteristic = null;
     let currentId = "";
     let currentDate = "";
+    let currentNote = "";
 
     function logMsg(msg) {
       const box = document.getElementById('debugBox');
@@ -61,61 +62,57 @@
       box.scrollTop = box.scrollHeight;
     }
 
-    function generujPodglad(idParagonu, dataParagonu, nrWorka) {
+    // Bezpieczne rysowanie etykiety z kodem QR
+    function odrysujEtykiete(idParagonu, dataParagonu, nrWorka) {
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
+
+      // Tło
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, 384, 240);
 
-      if (!idParagonu || idParagonu === "Brak") {
-        ctx.fillStyle = "#64748b";
-        ctx.font = "16px sans-serif";
-        ctx.fillText("Brak danych do druku", 100, 120);
-        return;
+      // Napisy
+      ctx.fillStyle = "#000000";
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText("BUTELKOBUS", 195, 45);
+
+      ctx.font = "12px sans-serif";
+      ctx.fillText("Data odbioru:", 195, 75);
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(dataParagonu || "-", 195, 95);
+
+      if (nrWorka && nrWorka !== "Brak") {
+        ctx.font = "12px sans-serif";
+        ctx.fillText("Worek:", 195, 125);
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText(nrWorka, 195, 145);
       }
 
-      let formattedDate = String(dataParagonu);
-      try {
-        let d = new Date(dataParagonu);
-        if (!isNaN(d.getTime())) {
-          formattedDate = d.toLocaleDateString("pl-PL") + " " + d.toLocaleTimeString("pl-PL", {hour: '2-digit', minute:'2-digit'});
-        }
-      } catch(e) {}
+      ctx.font = "12px sans-serif";
+      ctx.fillText("ID Paragonu:", 195, 175);
+      ctx.font = "bold 16px monospace";
 
-      QRCode.toCanvas(idParagonu, { width: 175, margin: 1 }, function (err, qrCanvas) {
-        if (!err) {
-          ctx.drawImage(qrCanvas, 10, 30);
-        }
-        
-        ctx.fillStyle = "#000000";
-        ctx.font = "bold 20px sans-serif";
-        ctx.fillText("BUTELKOBUS", 195, 45);
+      let parts = (idParagonu || "").split('/');
+      if (parts.length > 1) {
+        ctx.fillText(parts[0], 195, 195);
+        ctx.font = "bold 20px monospace";
+        ctx.fillText(parts[1], 195, 220);
+      } else {
+        ctx.fillText(idParagonu || "-", 195, 205);
+      }
 
-        ctx.font = "12px sans-serif";
-        ctx.fillText("Data odbioru:", 195, 75);
-        ctx.font = "bold 13px sans-serif";
-        ctx.fillText(formattedDate, 195, 95);
-
-        if (nrWorka && nrWorka !== "Brak") {
-          ctx.font = "12px sans-serif";
-          ctx.fillText("Worek:", 195, 125);
-          ctx.font = "bold 16px sans-serif";
-          ctx.fillText(nrWorka, 195, 145);
-        }
-
-        ctx.font = "12px sans-serif";
-        ctx.fillText("ID Paragonu:", 195, 175);
-        ctx.font = "bold 16px monospace";
-        
-        let parts = idParagonu.split('/');
-        if (parts.length > 1) {
-          ctx.fillText(parts[0], 195, 195);
-          ctx.font = "bold 20px monospace";
-          ctx.fillText(parts[1], 195, 220);
-        } else {
-          ctx.fillText(idParagonu, 195, 205);
-        }
-      });
+      // Rysowanie kodu QR
+      if (idParagonu && idParagonu !== "Brak" && window.QRCode) {
+        const tempCanvas = document.createElement('canvas');
+        QRCode.toCanvas(tempCanvas, idParagonu, { width: 175, margin: 1 }, function (err) {
+          if (!err) {
+            ctx.drawImage(tempCanvas, 10, 30);
+            logMsg("Podgląd etykiety wygenerowany.");
+          } else {
+            logMsg("Błąd QR: " + err);
+          }
+        });
+      }
     }
 
     function konfigurujPolaczenie() {
@@ -142,11 +139,11 @@
         if (json.status === "ok") {
           currentId = json.customId;
           currentDate = json.date;
-          let note = json.note || "Brak";
+          currentNote = json.note || "Brak";
           document.getElementById('lblId').innerText = currentId;
           document.getElementById('lblDate').innerText = currentDate;
-          document.getElementById('lblNote').innerText = note;
-          generujPodglad(currentId, currentDate, note);
+          document.getElementById('lblNote').innerText = currentNote;
+          odrysujEtykiete(currentId, currentDate, currentNote);
         } else {
           document.getElementById('lblId').innerText = "Błąd: " + (json.message || "Brak autoryzacji");
         }
@@ -249,6 +246,11 @@
         return;
       }
 
+      // Jeśli canvas jest jeszcze pusty, upewnij się, że mamy narysowane cokolwiek
+      const idDoDruku = currentId || document.getElementById('lblId').innerText;
+      odrysujEtykiete(idDoDruku, currentDate, currentNote);
+      await new Promise(r => setTimeout(r, 100));
+
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
@@ -284,13 +286,8 @@
             let b = imgData[idx + 2];
             let a = imgData[idx + 3];
 
-            // Czarny piksel: nieprzezroczysty i ciemny
+            // Czarny piksel
             let isBlack = (a > 128) && ((r + g + b) / 3 < 128);
-
-            // Zabezpieczenie: pierwsze 4 linie zawsze drukują mały pasek testowy na start
-            if (y < 4 && x >= 50 && x <= 334) {
-              isBlack = true;
-            }
 
             if (isBlack) {
               let byteIdx = Math.floor(x / 8);
@@ -305,7 +302,7 @@
 
           if (y % 40 === 0) {
             logMsg("Linia: " + y + "/240");
-            await new Promise(r => setTimeout(r, 10));
+            await new Promise(r => setTimeout(r, 8));
           } else {
             await new Promise(r => setTimeout(r, 2));
           }
@@ -326,6 +323,7 @@
         logMsg("Błąd pętli druku: " + err.message);
       }
     }
+
     window.onload = pobierzOstatniParagon;
   </script>
 </body>
