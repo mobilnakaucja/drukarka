@@ -154,7 +154,7 @@
       document.body.appendChild(script);
     }
 
-    async function polaczZNiimbot() {
+  async function polaczZNiimbot() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
@@ -167,31 +167,32 @@
 
         const server = await bluetoothDevice.gatt.connect();
 
-        // Inteligentne wykrywanie właściwego portu Niimbot B3S
-        let service = null;
-        let charUuid = null;
-
-        const knownServices = [
-          { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef83083-4331-4dfb-8088-50018247cd1e" },
-          { s: 0xFFE0, c: 0xFFE1 },
-          { s: 0xFEE7, c: 0xFEC8 }
-        ];
-
-        for (let target of knownServices) {
-          try {
-            service = await server.getPrimaryService(target.s);
-            if (service) {
-              charUuid = target.c;
-              break;
-            }
-          } catch(e) {}
+        // 1. Pobieramy główną usługę Niimbot
+        let service;
+        try {
+          service = await server.getPrimaryService("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
+        } catch(e) {
+          service = await server.getPrimaryService(0xFFE0);
         }
 
-        if (!service) {
-          throw new Error("Nie znaleziono kompatybilnego portu druku w B3S");
+        // 2. Automatycznie znajdujemy charakterystykę, do której można wysyłać dane
+        const characteristics = await service.getCharacteristics();
+        printCharacteristic = null;
+
+        for (let char of characteristics) {
+          if (char.properties.write || char.properties.writeWithoutResponse) {
+            printCharacteristic = char;
+            break;
+          }
         }
 
-        printCharacteristic = await service.getCharacteristic(charUuid);
+        if (!printCharacteristic && characteristics.length > 0) {
+          printCharacteristic = characteristics[0];
+        }
+
+        if (!printCharacteristic) {
+          throw new Error("Nie znaleziono portu zapisu w drukarce");
+        }
 
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
