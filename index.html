@@ -33,7 +33,7 @@
     <h2>Ostatni Paragon</h2>
     <button class="btn-refresh" onclick="pobierzOstatniParagon()">🔄 Odśwież dane</button>
     <div class="info-box">
-      <div><strong>ID:</strong> <span id="lblId">Brak konfiguracji</span></div>
+      <div><strong>ID:</strong> <span id="lblId">Pobieranie...</span></div>
       <div><strong>Data:</strong> <span id="lblDate">-</span></div>
       <div><strong>Worek:</strong> <span id="lblNote">-</span></div>
     </div>
@@ -50,7 +50,7 @@
     let currentId = "";
     let currentDate = "";
 
-    function generujPodglad(idParagonu, dataParagonu) {
+    function generujPodglad(idParagonu, dataParagonu, nrWorka) {
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = "#ffffff";
@@ -59,35 +59,51 @@
       if (!idParagonu || idParagonu === "Brak") {
         ctx.fillStyle = "#64748b";
         ctx.font = "16px sans-serif";
-        ctx.fillText("Brak danych do druku", 120, 120);
+        ctx.fillText("Brak danych do druku", 100, 120);
         return;
       }
 
-      QRCode.toCanvas(idParagonu, { width: 190, margin: 1 }, function (err, qrCanvas) {
+      // Bezpieczne parsowanie daty
+      let formattedDate = String(dataParagonu);
+      try {
+        let d = new Date(dataParagonu);
+        if (!isNaN(d.getTime())) {
+          formattedDate = d.toLocaleDateString("pl-PL") + " " + d.toLocaleTimeString("pl-PL", {hour: '2-digit', minute:'2-digit'});
+        }
+      } catch(e) {}
+
+      QRCode.toCanvas(idParagonu, { width: 175, margin: 1 }, function (err, qrCanvas) {
         if (!err) {
-          ctx.drawImage(qrCanvas, 15, 25);
+          ctx.drawImage(qrCanvas, 10, 30);
         }
         
         ctx.fillStyle = "#000000";
-        ctx.font = "bold 24px sans-serif";
-        ctx.fillText("BUTELKOBUS", 215, 55);
+        ctx.font = "bold 20px sans-serif";
+        ctx.fillText("BUTELKOBUS", 195, 45);
 
-        ctx.font = "14px sans-serif";
-        ctx.fillText("Data i godzina:", 215, 85);
+        ctx.font = "12px sans-serif";
+        ctx.fillText("Data odbioru:", 195, 75);
         ctx.font = "bold 13px sans-serif";
-        ctx.fillText(dataParagonu.substring(5), 215, 105);
+        ctx.fillText(formattedDate, 195, 95);
 
-        ctx.font = "14px sans-serif";
-        ctx.fillText("ID Paragonu:", 215, 140);
-        ctx.font = "bold 18px monospace";
+        if (nrWorka && nrWorka !== "Brak") {
+          ctx.font = "12px sans-serif";
+          ctx.fillText("Worek:", 195, 125);
+          ctx.font = "bold 16px sans-serif";
+          ctx.fillText(nrWorka, 195, 145);
+        }
+
+        ctx.font = "12px sans-serif";
+        ctx.fillText("ID Paragonu:", 195, 175);
+        ctx.font = "bold 16px monospace";
         
         let parts = idParagonu.split('/');
         if (parts.length > 1) {
-          ctx.fillText(parts[0], 215, 165);
-          ctx.font = "bold 22px monospace";
-          ctx.fillText(parts[1], 215, 195);
+          ctx.fillText(parts[0], 195, 195);
+          ctx.font = "bold 20px monospace";
+          ctx.fillText(parts[1], 195, 220);
         } else {
-          ctx.fillText(idParagonu, 215, 175);
+          ctx.fillText(idParagonu, 195, 205);
         }
       });
     }
@@ -116,10 +132,11 @@
         if (json.status === "ok") {
           currentId = json.customId;
           currentDate = json.date;
+          let note = json.note || "Brak";
           document.getElementById('lblId').innerText = currentId;
           document.getElementById('lblDate').innerText = currentDate;
-          document.getElementById('lblNote').innerText = json.note || "Brak";
-          generujPodglad(currentId, currentDate);
+          document.getElementById('lblNote').innerText = note;
+          generujPodglad(currentId, currentDate, note);
         } else {
           document.getElementById('lblId').innerText = "Błąd: " + (json.message || "Brak autoryzacji");
         }
@@ -136,34 +153,53 @@
       };
       document.body.appendChild(script);
     }
+
     async function polaczZNiimbot() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [
             "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
-            0xFFE0, 
-            0xFFF0,
-            0xfee7
+            0xFFE0,
+            0xFEE7
           ]
         });
 
         const server = await bluetoothDevice.gatt.connect();
+
+        // Inteligentne wykrywanie właściwego portu Niimbot B3S
+        let service = null;
+        let charUuid = null;
+
+        const knownServices = [
+          { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef83083-4331-4dfb-8088-50018247cd1e" },
+          { s: 0xFFE0, c: 0xFFE1 },
+          { s: 0xFEE7, c: 0xFEC8 }
+        ];
+
+        for (let target of knownServices) {
+          try {
+            service = await server.getPrimaryService(target.s);
+            if (service) {
+              charUuid = target.c;
+              break;
+            }
+          } catch(e) {}
+        }
+
+        if (!service) {
+          throw new Error("Nie znaleziono kompatybilnego portu druku w B3S");
+        }
+
+        printCharacteristic = await service.getCharacteristic(charUuid);
+
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
         badge.className = "status-badge status-on";
 
-        let service;
-        try {
-          service = await server.getPrimaryService("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
-          printCharacteristic = await service.getCharacteristic("bef83083-4331-4dfb-8088-50018247cd1e");
-        } catch(err) {
-          service = await server.getPrimaryService(0xFFE0);
-          printCharacteristic = await service.getCharacteristic(0xFFE1);
-        }
         alert("Połączono pomyślnie z " + bluetoothDevice.name);
       } catch (err) {
-        alert("Błąd połączenia: " + err);
+        alert("Błąd połączenia: " + err.message);
       }
     }
 
