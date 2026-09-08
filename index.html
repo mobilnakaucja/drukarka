@@ -251,27 +251,28 @@
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
       try {
-        // 1. Handshake i parametry etykiety
-        await wyslijPakiet(stworzPakietNiimbot(0xDC, [0x01]), 20);
-        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03]), 15); // Zaczernienie
-        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01]), 15); // Etykieta z przerwą
+        // 1. Ustawienie gęstości druku (0x21) i typu papieru (0x23: 1 = etykieta z przerwą)
+        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03]), 15);
+        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01]), 15);
 
-        // 2. Start zadania drukowania (0x01): 1 strona
+        // 2. Start zadania druku (0x01): 1 kopia
         await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01]), 25);
 
-        // 3. Start bufora (0x20) i Start strony (0x03)
-        await wyslijPakiet(stworzPakietNiimbot(0x20, [0x01]), 15);
+        // 3. Początek strony (0x03)
         await wyslijPakiet(stworzPakietNiimbot(0x03, [0x01]), 25);
 
-        // 4. Wymiary etykiety (szerokość: 384, wysokość: 240)
-        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x00, 0xF0, 0x01, 0x80]), 15);
-        await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]), 15);
+        // 4. Wymiary etykiety (0x13): w B3S/B21 najpierw szerokość w punktach (384 = 0x0180), potem linie (240 = 0x00F0)
+        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x01, 0x80, 0x00, 0xF0]), 20);
 
-        // 5. Przesyłanie rastra pikseli
-        const widthBytes = 48; // 384 / 8
+        // 5. Ilość kopii strony (0x15: 1)
+        await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]), 20);
+
+        // 6. Przesyłanie rastra pikseli (384 px szerokości = 48 bajtów na linię)
+        const widthBytes = 48;
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
+
           for (let x = 0; x < 384; x++) {
             let idx = (y * 384 + x) * 4;
             let avg = (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / 3;
@@ -281,16 +282,18 @@
             }
           }
 
-          // Pakiet linii dla B3S
+          // Pakiet linii: [nr_H, nr_L, 0x01, ...bajty_linii]
           let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
-          await wyslijPakiet(stworzPakietNiimbot(0x85, payload), 4);
+          await wyslijPakiet(stworzPakietNiimbot(0x85, payload), 3);
         }
 
-        // 6. Zakończenie strony
+        // 7. Koniec strony (0xE3)
         await wyslijPakiet(stworzPakietNiimbot(0xE3, [0x01]), 40);
 
-        // 7. Zakończenie zadania druku i wymuszenie wysunięcia
+        // 8. Zakończenie zadania drukowania (0xF3)
         await wyslijPakiet(stworzPakietNiimbot(0xF3, [0x01]), 50);
+
+        // 9. Komenda wysunięcia etykiety do następnej przerwy (Form Feed: 0x0E)
         await wyslijPakiet(stworzPakietNiimbot(0x0E, [0x01]), 20);
 
       } catch (err) {
