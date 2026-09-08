@@ -251,17 +251,6 @@
 
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
-
-      // Jeśli canvas jest pusty, wymuś ponowne wygenerowanie podglądu
-      if (!currentId) {
-        currentId = document.getElementById('lblId').innerText;
-      }
-      if (!currentId || currentId === "Pobieranie...") {
-        currentId = "TEST-2137";
-        generujPodglad(currentId, new Date().toISOString(), "TEST");
-        await new Promise(r => setTimeout(r, 200));
-      }
-
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
       logMsg("--- START DRUKU ---");
@@ -283,7 +272,6 @@
         // 4. Wysyłanie linii grafiki (240 linii po 48 bajtów)
         logMsg("Wysyłanie 240 linii...");
         const widthBytes = 48; // 384 px / 8
-
         let blackPixelsTotal = 0;
 
         for (let y = 0; y < 240; y++) {
@@ -291,8 +279,20 @@
 
           for (let x = 0; x < 384; x++) {
             let idx = (y * 384 + x) * 4;
-            let avg = (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / 3;
-            if (avg < 128) {
+            let r = imgData[idx];
+            let g = imgData[idx + 1];
+            let b = imgData[idx + 2];
+            let a = imgData[idx + 3];
+
+            // Czarny piksel: nieprzezroczysty i ciemny
+            let isBlack = (a > 128) && ((r + g + b) / 3 < 128);
+
+            // Zabezpieczenie: pierwsze 4 linie zawsze drukują mały pasek testowy na start
+            if (y < 4 && x >= 50 && x <= 334) {
+              isBlack = true;
+            }
+
+            if (isBlack) {
               let byteIdx = Math.floor(x / 8);
               lineBytes[byteIdx] |= (0x80 >> (x % 8));
               blackPixelsTotal++;
