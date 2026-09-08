@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drukarka ButelkoBus</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 16px; background: #f1f5f9; text-align: center; }
+    .card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    h2 { margin-top: 0; color: #0f172a; font-size: 19px; }
+    .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 14px; margin-bottom: 12px; }
+    .status-off { background: #fee2e2; color: #b91c1c; }
+    .status-on { background: #dcfce7; color: #15803d; }
+    button { width: 100%; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 8px; margin: 8px 0; cursor: pointer; }
+    .btn-bt { background: #2563eb; color: white; }
+    .btn-print { background: #16a34a; color: white; font-size: 20px; padding: 18px; }
+    .btn-refresh { background: #e2e8f0; color: #334155; }
+    .btn-cfg { background: none; border: 1px dashed #94a3b8; color: #64748b; font-size: 12px; padding: 8px; }
+    #previewCanvas { border: 2px dashed #94a3b8; background: white; margin-top: 10px; width: 100%; max-width: 320px; height: auto; }
+    .info-box { font-size: 15px; color: #334155; margin: 8px 0; text-align: left; background: #f8fafc; padding: 10px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Drukarka Niimbot B3S</h2>
+    <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
+    <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z Niimbot B3S</button>
+  </div>
+
+  <div class="card">
+    <h2>Ostatni Paragon</h2>
+    <button class="btn-refresh" onclick="pobierzOstatniParagon()">🔄 Odśwież dane</button>
+    <div class="info-box">
+      <div><strong>ID:</strong> <span id="lblId">Brak konfiguracji</span></div>
+      <div><strong>Data:</strong> <span id="lblDate">-</span></div>
+      <div><strong>Worek:</strong> <span id="lblNote">-</span></div>
+    </div>
+    
+    <canvas id="previewCanvas" width="384" height="240"></canvas>
+    
+    <button class="btn-print" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
+    <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
+  </div>
+
+  <script>
+    let bluetoothDevice = null;
+    let printCharacteristic = null;
+    let currentId = "";
+    let currentDate = "";
+
+    function generujPodglad(idParagonu, dataParagonu) {
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 384, 240);
+
+      if (!idParagonu || idParagonu === "Brak") {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "16px sans-serif";
+        ctx.fillText("Brak danych do druku", 120, 120);
+        return;
+      }
+
+      QRCode.toCanvas(idParagonu, { width: 190, margin: 1 }, function (err, qrCanvas) {
+        if (!err) {
+          ctx.drawImage(qrCanvas, 15, 25);
+        }
+        
+        ctx.fillStyle = "#000000";
+        ctx.font = "bold 24px sans-serif";
+        ctx.fillText("BUTELKOBUS", 215, 55);
+
+        ctx.font = "14px sans-serif";
+        ctx.fillText("Data i godzina:", 215, 85);
+        ctx.font = "bold 13px sans-serif";
+        ctx.fillText(dataParagonu.substring(5), 215, 105);
+
+        ctx.font = "14px sans-serif";
+        ctx.fillText("ID Paragonu:", 215, 140);
+        ctx.font = "bold 18px monospace";
+        
+        let parts = idParagonu.split('/');
+        if (parts.length > 1) {
+          ctx.fillText(parts[0], 215, 165);
+          ctx.font = "bold 22px monospace";
+          ctx.fillText(parts[1], 215, 195);
+        } else {
+          ctx.fillText(idParagonu, 215, 175);
+        }
+      });
+    }
+
+    function konfigurujPolaczenie() {
+      let url = prompt("Wklej link wdrożenia Apps Script (/exec):", localStorage.getItem("bb_url") || "");
+      if (url) localStorage.setItem("bb_url", url.trim());
+      let key = prompt("Wpisz swój tajny PIN / Klucz:", localStorage.getItem("bb_key") || "");
+      if (key) localStorage.setItem("bb_key", key.trim());
+      pobierzOstatniParagon();
+    }
+
+    async function pobierzOstatniParagon() {
+      let url = localStorage.getItem("bb_url");
+      let key = localStorage.getItem("bb_key");
+      
+      if (!url || !key) {
+        document.getElementById('lblId').innerText = "Kliknij ⚙️ Ustawienia poniżej";
+        return;
+      }
+
+      try {
+        let separator = url.indexOf('?') !== -1 ? '&' : '?';
+        let res = await fetch(url + separator + "key=" + encodeURIComponent(key));
+        let json = await res.json();
+        
+        if (json.status === "ok") {
+          currentId = json.customId;
+          currentDate = json.date;
+          document.getElementById('lblId').innerText = currentId;
+          document.getElementById('lblDate').innerText = currentDate;
+          document.getElementById('lblNote').innerText = json.note || "Brak";
+          generujPodglad(currentId, currentDate);
+        } else {
+          document.getElementById('lblId').innerText = "Błąd: " + (json.message || "Brak autoryzacji");
+        }
+      } catch (e) {
+        document.getElementById('lblId').innerText = "Błąd pobierania danych";
+      }
+    }
+
+    async function polaczZNiimbot() {
+      try {
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
+            0xFFE0, 
+            0xFFF0,
+            0xfee7
+          ]
+        });
+
+        const server = await bluetoothDevice.gatt.connect();
+        const badge = document.getElementById('btStatus');
+        badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
+        badge.className = "status-badge status-on";
+
+        let service;
+        try {
+          service = await server.getPrimaryService("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
+          printCharacteristic = await service.getCharacteristic("bef83083-4331-4dfb-8088-50018247cd1e");
+        } catch(err) {
+          service = await server.getPrimaryService(0xFFE0);
+          printCharacteristic = await service.getCharacteristic(0xFFE1);
+        }
+        alert("Połączono pomyślnie z " + bluetoothDevice.name);
+      } catch (err) {
+        alert("Błąd połączenia: " + err);
+      }
+    }
+
+    async function drukujEtykiete() {
+      if (!printCharacteristic) {
+        alert("Najpierw połącz się z drukarką!");
+        return;
+      }
+
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, 384, 240).data;
+
+      let widthBytes = 384 / 8;
+      let totalBytes = widthBytes * 240;
+      let raster = new Uint8Array(totalBytes);
+
+      for (let y = 0; y < 240; y++) {
+        for (let x = 0; x < 384; x++) {
+          let idx = (y * 384 + x) * 4;
+          let avg = (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / 3;
+          if (avg < 128) {
+            let byteIndex = y * widthBytes + Math.floor(x / 8);
+            raster[byteIndex] |= (0x80 >> (x % 8));
+          }
+        }
+      }
+
+      try {
+        const CHUNK_SIZE = 80;
+        for (let i = 0; i < raster.length; i += CHUNK_SIZE) {
+          let chunk = raster.slice(i, i + CHUNK_SIZE);
+          await printCharacteristic.writeValueWithoutResponse(chunk);
+        }
+      } catch (e) {
+        alert("Błąd wysyłania do druku: " + e.message);
+      }
+    }
+
+    window.onload = pobierzOstatniParagon;
+  </script>
+</body>
+</html>
