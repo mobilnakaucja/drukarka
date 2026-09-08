@@ -19,7 +19,7 @@
     .btn-cfg { background: none; border: 1px dashed #94a3b8; color: #64748b; font-size: 12px; padding: 8px; }
     #previewCanvas { border: 2px dashed #94a3b8; background: white; margin-top: 10px; width: 100%; max-width: 320px; height: auto; }
     .info-box { font-size: 15px; color: #334155; margin: 8px 0; text-align: left; background: #f8fafc; padding: 10px; border-radius: 6px; }
-    #logOutput { font-size: 12px; color: #64748b; margin-top: 8px; min-height: 16px; }
+    #debugBox { background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; text-align: left; max-height: 140px; overflow-y: auto; margin-top: 10px; white-space: pre-wrap; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -42,28 +42,30 @@
     <canvas id="previewCanvas" width="384" height="240"></canvas>
     
     <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
-    <div id="logOutput"></div>
+    
+    <div id="debugBox">Logi drukarki pojawią się tutaj...</div>
+
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
 
   <script>
     let bluetoothDevice = null;
     let printCharacteristic = null;
+    let notifyCharacteristic = null;
     let currentId = "";
     let currentDate = "";
 
-    const CANVAS_WIDTH = 384;
-    const CANVAS_HEIGHT = 240;
-
-    function logStatus(text) {
-      document.getElementById('logOutput').innerText = text;
+    function logMsg(msg) {
+      const box = document.getElementById('debugBox');
+      box.innerText += "\n" + msg;
+      box.scrollTop = box.scrollHeight;
     }
 
     function generujPodglad(idParagonu, dataParagonu, nrWorka) {
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillRect(0, 0, 384, 240);
 
       if (!idParagonu || idParagonu === "Brak") {
         ctx.fillStyle = "#64748b";
@@ -164,6 +166,7 @@
 
     async function polaczZNiimbot() {
       try {
+        logMsg("Szukanie urządzenia...");
         bluetoothDevice = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [
@@ -174,140 +177,103 @@
         });
 
         const server = await bluetoothDevice.gatt.connect();
+        logMsg("Połączono z GATT. Pobieranie usług...");
 
         let service;
         try {
           service = await server.getPrimaryService("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
         } catch(e) {
-          try {
-            service = await server.getPrimaryService(0xFFE0);
-          } catch(e2) {
-            service = await server.getPrimaryService(0xFEE7);
-          }
+          service = await server.getPrimaryService(0xFFE0);
         }
 
         const characteristics = await service.getCharacteristics();
         printCharacteristic = null;
+        notifyCharacteristic = null;
 
         for (let char of characteristics) {
           if (char.properties.write || char.properties.writeWithoutResponse) {
             printCharacteristic = char;
-            break;
+          }
+          if (char.properties.notify || char.properties.indicate) {
+            notifyCharacteristic = char;
           }
         }
 
-        if (!printCharacteristic && characteristics.length > 0) {
-          printCharacteristic = characteristics[0];
+        if (notifyCharacteristic) {
+          await notifyCharacteristic.startNotifications();
+          notifyCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
+            let val = new Uint8Array(e.target.value.buffer);
+            let hex = Array.from(val).map(b => b.toString(16).padStart(2, '0')).join(' ');
+            logMsg("Drukarka: " + hex);
+          });
+          logMsg("Nasłuch włączony.");
         }
 
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
         badge.className = "status-badge status-on";
-        logStatus("Połączono z drukarką.");
+        logMsg("Gotowy do druku!");
       } catch (err) {
-        alert("Błąd połączenia: " + err.message);
+        logMsg("Błąd: " + err.message);
       }
     }
 
-    // Prawidłowe budowanie pakietu protokołu Niimbot
     function zbudujPakiet(type, payload = []) {
       const length = payload.length;
       const raw = [0x55, 0x55, type, length, ...payload];
-      
       let checksum = 0;
       for (let i = 2; i < raw.length; i++) {
         checksum ^= raw[i];
       }
-      
       raw.push(checksum & 0xFF);
       raw.push(0xAA, 0xAA);
       return new Uint8Array(raw);
     }
 
     async function wyslij(packet) {
-      const CHUNK_SIZE = 100; // Większość urządzeń BLE przyjmuje paczki 20-128 bajtów
-      for (let i = 0; i < packet.length; i += CHUNK_SIZE) {
-        const chunk = packet.slice(i, i + CHUNK_SIZE);
+      const CHUNK = 20;
+      for (let i = 0; i < packet.length; i += CHUNK) {
+        const slice = packet.slice(i, i + CHUNK);
         if (printCharacteristic.properties.writeWithoutResponse) {
-          await printCharacteristic.writeValueWithoutResponse(chunk);
+          await printCharacteristic.writeValueWithoutResponse(slice);
         } else {
-          await printCharacteristic.writeValueWithResponse(chunk);
+          await printCharacteristic.writeValueWithResponse(slice);
         }
-        await new Promise(r => setTimeout(r, 6));
+        await new Promise(r => setTimeout(r, 4));
       }
     }
 
     async function drukujEtykiete() {
       if (!printCharacteristic) {
-        alert("Najpierw połącz się z drukarką!");
+        alert("Najpierw połącz z drukarką!");
         return;
       }
 
-      const btn = document.getElementById('btnPrint');
-      btn.disabled = true;
-      logStatus("Wysyłanie testu...");
-
+      logMsg("--- START DRUKU ---");
       try {
-        // 1. Reset i wybudzenie
-        await wyslij(zbudujPakiet(0xDC, [0x01]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 2. Ustawienie gęstości druku (0x21: 3)
-        await wyslij(zbudujPakiet(0x21, [0x03]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 3. Typ papieru (0x23: 1 = etykieta z przerwą)
-        await wyslij(zbudujPakiet(0x23, [0x01]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 4. Start druku - deklaracja 1 strony
-        await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 5. Start strony
-        await wyslij(zbudujPakiet(0x03, [0x01]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 6. Drukujemy 100 linii: 20 linii czarnych, 60 białych, 20 czarnych
-        // Szerokość B3S to 384 piksele = 48 bajtów
-        const bytesPerLine = 48;
-        const totalLines = 100;
-
-        for (let y = 0; y < totalLines; y++) {
-          let line = new Uint8Array(bytesPerLine);
-
-          // Paski czarne na początku i na końcu
-          if (y < 20 || y >= 80) {
-            line.fill(0xFF); // czarny
-          } else {
-            line.fill(0x00); // biały
-          }
-
-          // Format komendy 0x85 dla B3S: [nr_linii_H, nr_linii_L, dane...]
-          // Bez bajtu powtórzeń, czysty numer linii 2-bajtowy + bajty pikseli
-          let linePayload = [(y >> 8) & 0xFF, y & 0xFF, ...line];
-          await wyslij(zbudujPakiet(0x85, linePayload));
-
-          await new Promise(r => setTimeout(r, 10));
-        }
-
-        // 7. Koniec strony
-        await wyslij(zbudujPakiet(0xE3, [0x01]));
-        await new Promise(r => setTimeout(r, 80));
-
-        // 8. Koniec zadania i wysuw
-        await wyslij(zbudujPakiet(0xF3, [0x01]));
+        // Zapytanie o status drukarki
+        logMsg("Wysyłam status (0xA3)...");
+        await wyslij(zbudujPakiet(0xA3, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 9. Form feed (wysuń etykietę do krawędzi)
-        await wyslij(zbudujPakiet(0x0E, [0x01]));
+        // Start druku
+        logMsg("Start job (0x01)...");
+        await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
+        await new Promise(r => setTimeout(r, 80));
 
-        logStatus("Wysłano test!");
+        // Start strony
+        logMsg("Start page (0x03)...");
+        await wyslij(zbudujPakiet(0x03, [0x01]));
+        await new Promise(r => setTimeout(r, 80));
+
+        // Koniec
+        logMsg("End page & job...");
+        await wyslij(zbudujPakiet(0xE3, [0x01]));
+        await new Promise(r => setTimeout(r, 80));
+        await wyslij(zbudujPakiet(0xF3, [0x01]));
+        logMsg("Zakończono wysyłanie.");
       } catch (err) {
-        logStatus("Błąd: " + err.message);
-        alert("Błąd: " + err.message);
-      } finally {
-        btn.disabled = false;
+        logMsg("Błąd druku: " + err.message);
       }
     }
 
