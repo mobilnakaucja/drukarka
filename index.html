@@ -249,29 +249,61 @@
         return;
       }
 
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, 384, 240).data;
+
       logMsg("--- START DRUKU ---");
       try {
-        // Zapytanie o status drukarki
-        logMsg("Wysyłam status (0xA3)...");
+        // 1. Status zapytania
         await wyslij(zbudujPakiet(0xA3, [0x01]));
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 50));
 
-        // Start druku
-        logMsg("Start job (0x01)...");
+        // 2. Start zadania (1 kopia)
+        logMsg("Start zadania...");
         await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 60));
 
-        // Start strony
-        logMsg("Start page (0x03)...");
+        // 3. Start strony
+        logMsg("Start strony...");
         await wyslij(zbudujPakiet(0x03, [0x01]));
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 60));
 
-        // Koniec
-        logMsg("End page & job...");
+        // 4. Wysyłanie linii grafiki (240 linii po 48 bajtów)
+        logMsg("Wysyłanie grafiki...");
+        const widthBytes = 48; // 384 px / 8
+
+        for (let y = 0; y < 240; y++) {
+          let lineBytes = new Uint8Array(widthBytes);
+
+          for (let x = 0; x < 384; x++) {
+            let idx = (y * 384 + x) * 4;
+            let avg = (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / 3;
+            if (avg < 128) {
+              let byteIdx = Math.floor(x / 8);
+              lineBytes[byteIdx] |= (0x80 >> (x % 8));
+            }
+          }
+
+          // Pakiet linii: [nr_linii_H, nr_linii_L, ...piksele]
+          let payload = [(y >> 8) & 0xFF, y & 0xFF, ...lineBytes];
+          await wyslij(zbudujPakiet(0x85, payload));
+
+          // Delikatna pauza co kilka linii, żeby bufor BLE nie gubił pakietów
+          if (y % 8 === 0) {
+            await new Promise(r => setTimeout(r, 6));
+          }
+        }
+
+        // 5. Koniec strony
+        logMsg("Zamykanie strony...");
         await wyslij(zbudujPakiet(0xE3, [0x01]));
         await new Promise(r => setTimeout(r, 80));
+
+        // 6. Koniec zadania i wysuw
+        logMsg("Kończenie wydruku...");
         await wyslij(zbudujPakiet(0xF3, [0x01]));
-        logMsg("Zakończono wysyłanie.");
+        
       } catch (err) {
         logMsg("Błąd druku: " + err.message);
       }
