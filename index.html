@@ -245,64 +245,67 @@
 
       const btn = document.getElementById('btnPrint');
       btn.disabled = true;
-      logStatus("Przygotowywanie danych druku...");
+      logStatus("Wysyłanie testu...");
 
       try {
-        const canvas = document.getElementById('previewCanvas');
-        const ctx = canvas.getContext('2d');
-        const imgData = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT).data;
-
-        // Inicjalizacja sesji druku
-        await wyslij(zbudujPakiet(0x01, [0x00, 0x01])); // Start print: 1 kopia
+        // 1. Reset i wybudzenie
+        await wyslij(zbudujPakiet(0xDC, [0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        await wyslij(zbudujPakiet(0x03, [0x01])); // Start page
+        // 2. Ustawienie gęstości druku (0x21: 3)
+        await wyslij(zbudujPakiet(0x21, [0x03]));
         await new Promise(r => setTimeout(r, 50));
 
-        // Format wymiarów w standardzie Little Endian (Wysokość: 240, Szerokość: 384)
-        const hLow = CANVAS_HEIGHT & 0xFF;
-        const hHigh = (CANVAS_HEIGHT >> 8) & 0xFF;
-        const wLow = CANVAS_WIDTH & 0xFF;
-        const wHigh = (CANVAS_WIDTH >> 8) & 0xFF;
-        
-        await wyslij(zbudujPakiet(0x13, [hHigh, hLow, wHigh, wLow]));
+        // 3. Typ papieru (0x23: 1 = etykieta z przerwą)
+        await wyslij(zbudujPakiet(0x23, [0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        const bytesPerLine = CANVAS_WIDTH / 8; // 48 bajtów
+        // 4. Start druku - deklaracja 1 strony
+        await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
+        await new Promise(r => setTimeout(r, 50));
 
-        for (let y = 0; y < CANVAS_HEIGHT; y++) {
+        // 5. Start strony
+        await wyslij(zbudujPakiet(0x03, [0x01]));
+        await new Promise(r => setTimeout(r, 50));
+
+        // 6. Drukujemy 100 linii: 20 linii czarnych, 60 białych, 20 czarnych
+        // Szerokość B3S to 384 piksele = 48 bajtów
+        const bytesPerLine = 48;
+        const totalLines = 100;
+
+        for (let y = 0; y < totalLines; y++) {
           let line = new Uint8Array(bytesPerLine);
 
-          for (let x = 0; x < CANVAS_WIDTH; x++) {
-            let offset = (y * CANVAS_WIDTH + x) * 4;
-            // Sprawdzanie jasności piksela (czarny piksel = 1, biały = 0)
-            let brightness = (imgData[offset] + imgData[offset + 1] + imgData[offset + 2]) / 3;
-            if (brightness < 128) {
-              line[Math.floor(x / 8)] |= (0x80 >> (x % 8));
-            }
+          // Paski czarne na początku i na końcu
+          if (y < 20 || y >= 80) {
+            line.fill(0xFF); // czarny
+          } else {
+            line.fill(0x00); // biały
           }
 
-          // Pakiet linii: [nr_linii_MSB, nr_linii_LSB, powtórzenia=1, ...dane]
-          let lineHeader = [(y >> 8) & 0xFF, y & 0xFF, 0x01];
-          let linePayload = [...lineHeader, ...line];
+          // Format komendy 0x85 dla B3S: [nr_linii_H, nr_linii_L, dane...]
+          // Bez bajtu powtórzeń, czysty numer linii 2-bajtowy + bajty pikseli
+          let linePayload = [(y >> 8) & 0xFF, y & 0xFF, ...line];
           await wyslij(zbudujPakiet(0x85, linePayload));
 
-          if (y % 30 === 0) {
-            logStatus(`Drukowanie: ${Math.round((y / CANVAS_HEIGHT) * 100)}%`);
-          }
+          await new Promise(r => setTimeout(r, 10));
         }
 
-        logStatus("Kończenie wydruku...");
-        await wyslij(zbudujPakiet(0xE3, [0x01])); // Koniec strony
-        await new Promise(r => setTimeout(r, 60));
+        // 7. Koniec strony
+        await wyslij(zbudujPakiet(0xE3, [0x01]));
+        await new Promise(r => setTimeout(r, 80));
 
-        await wyslij(zbudujPakiet(0xF3, [0x01])); // Koniec zadania drukowania
-        await new Promise(r => setTimeout(r, 60));
+        // 8. Koniec zadania i wysuw
+        await wyslij(zbudujPakiet(0xF3, [0x01]));
+        await new Promise(r => setTimeout(r, 100));
 
-        logStatus("Gotowe!");
+        // 9. Form feed (wysuń etykietę do krawędzi)
+        await wyslij(zbudujPakiet(0x0E, [0x01]));
+
+        logStatus("Wysłano test!");
       } catch (err) {
-        logStatus("Błąd drukowania");
-        alert("Błąd podczas drukowania: " + err.message);
+        logStatus("Błąd: " + err.message);
+        alert("Błąd: " + err.message);
       } finally {
         btn.disabled = false;
       }
