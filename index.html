@@ -153,6 +153,8 @@
       document.body.appendChild(script);
     }
 
+    let notifyCharacteristic = null;
+
     async function polaczZNiimbot() {
       try {
         bluetoothDevice = await navigator.bluetooth.requestDevice({
@@ -175,11 +177,14 @@
 
         const characteristics = await service.getCharacteristics();
         printCharacteristic = null;
+        notifyCharacteristic = null;
 
         for (let char of characteristics) {
           if (char.properties.write || char.properties.writeWithoutResponse) {
             printCharacteristic = char;
-            break;
+          }
+          if (char.properties.notify || char.properties.indicate) {
+            notifyCharacteristic = char;
           }
         }
 
@@ -187,8 +192,12 @@
           printCharacteristic = characteristics[0];
         }
 
-        if (!printCharacteristic) {
-          throw new Error("Nie znaleziono portu zapisu w drukarce");
+        // Włączamy nasłuchiwanie odpowiedzi z drukarki (kluczowe dla B3S!)
+        if (notifyCharacteristic) {
+          await notifyCharacteristic.startNotifications();
+          notifyCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
+            // Odbieranie ACK z drukarki
+          });
         }
 
         const badge = document.getElementById('btStatus');
@@ -215,7 +224,7 @@
       return new Uint8Array(packet);
     }
 
-    async function wyslijPakiet(packet, waitMs = 12) {
+    async function wyslijPakiet(packet, waitMs = 8) {
       const BLE_CHUNK = 20;
       for (let offset = 0; offset < packet.length; offset += BLE_CHUNK) {
         let chunk = packet.slice(offset, offset + BLE_CHUNK);
@@ -224,7 +233,7 @@
         } else {
           await printCharacteristic.writeValueWithResponse(chunk);
         }
-        await new Promise(r => setTimeout(r, 6));
+        await new Promise(r => setTimeout(r, 4));
       }
       if (waitMs > 0) {
         await new Promise(r => setTimeout(r, waitMs));
@@ -242,57 +251,47 @@
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
       try {
-        // 1. Inicjalizacja i czyszczenie stanu
-        await wyslijPakiet(stworzPakietNiimbot(0xDC, [0x01]), 30); // Heartbeat
-        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03]), 20); // Gęstość druku (3/5)
-        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01]), 20); // Typ papieru (1 = etykieta z przerwą)
+        // 1. Handshake i parametry etykiety
+        await wyslijPakiet(stworzPakietNiimbot(0xDC, [0x01]), 20);
+        await wyslijPakiet(stworzPakietNiimbot(0x21, [0x03]), 15); // Zaczernienie
+        await wyslijPakiet(stworzPakietNiimbot(0x23, [0x01]), 15); // Etykieta z przerwą
 
-        // 2. Start zadania drukowania (0x01) - 1 strona
-        await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01, 0x00, 0x01]), 30);
+        // 2. Start zadania drukowania (0x01): 1 strona
+        await wyslijPakiet(stworzPakietNiimbot(0x01, [0x00, 0x01]), 25);
 
-        // 3. Wyczyszczenie bufora drukarki przed załadowaniem grafiki
-        await wyslijPakiet(stworzPakietNiimbot(0x20, [0x01]), 20);
+        // 3. Start bufora (0x20) i Start strony (0x03)
+        await wyslijPakiet(stworzPakietNiimbot(0x20, [0x01]), 15);
+        await wyslijPakiet(stworzPakietNiimbot(0x03, [0x01]), 25);
 
-        // 4. Początek strony (0x03)
-        await wyslijPakiet(stworzPakietNiimbot(0x03, [0x01]), 30);
+        // 4. Wymiary etykiety (szerokość: 384, wysokość: 240)
+        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x00, 0xF0, 0x01, 0x80]), 15);
+        await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]), 15);
 
-        // 5. Wymiary obszaru druku (0x13): wysokość 240 linii (0x00, 0xF0), szerokość 384 px (0x01, 0x80)
-        await wyslijPakiet(stworzPakietNiimbot(0x13, [0x00, 0xF0, 0x01, 0x80]), 20);
-
-        // 6. Ilość kopii strony (0x15)
-        await wyslijPakiet(stworzPakietNiimbot(0x15, [0x00, 0x01]), 20);
-
-        // 7. Przesyłanie wierszy rastra (B3S: komenda 0x85)
-        const widthBytes = 48; // 384 px / 8
+        // 5. Przesyłanie rastra pikseli
+        const widthBytes = 48; // 384 / 8
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
-
           for (let x = 0; x < 384; x++) {
             let idx = (y * 384 + x) * 4;
             let avg = (imgData[idx] + imgData[idx + 1] + imgData[idx + 2]) / 3;
-            // Czarny piksel to bit 1
             if (avg < 128) {
               let byteIdx = Math.floor(x / 8);
               lineBytes[byteIdx] |= (0x80 >> (x % 8));
             }
           }
 
-          // Pakiet linii: [nr_linii_wysoki, nr_linii_niski, powtórzenia=1, ...dane_pikseli]
+          // Pakiet linii dla B3S
           let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
-          
-          // Wysyłamy linię i dajemy buforowi czas na zapisanie w pamięci RAM drukarki
-          await wyslijPakiet(stworzPakietNiimbot(0x85, payload), 8);
+          await wyslijPakiet(stworzPakietNiimbot(0x85, payload), 4);
         }
 
-        // 8. Koniec strony (0xE3)
-        await wyslijPakiet(stworzPakietNiimbot(0xE3, [0x01]), 50);
+        // 6. Zakończenie strony
+        await wyslijPakiet(stworzPakietNiimbot(0xE3, [0x01]), 40);
 
-        // 9. Koniec zadania druku (0xF3) - drukarka rozpoczyna fizyczny wytłok i wysuw
-        await wyslijPakiet(stworzPakietNiimbot(0xF3, [0x01]), 100);
-
-        // 10. Komenda domknięcia / wysunięcia do szczeliny
-        await wyslijPakiet(stworzPakietNiimbot(0x0E, [0x01]), 50);
+        // 7. Zakończenie zadania druku i wymuszenie wysunięcia
+        await wyslijPakiet(stworzPakietNiimbot(0xF3, [0x01]), 50);
+        await wyslijPakiet(stworzPakietNiimbot(0x0E, [0x01]), 20);
 
       } catch (err) {
         alert("Błąd drukowania: " + err.message);
