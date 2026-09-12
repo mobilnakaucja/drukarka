@@ -183,17 +183,11 @@
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
     }
 
-    // Obsługa pakietów przychodzących (Auto-Handshake & RFID response)
     function onDataReceived(event) {
       const val = new Uint8Array(event.target.value.buffer);
-      const hex = Array.from(val).map(b => b.toString(16).padStart(2, '0')).join(' ');
-
-      // Gdy drukarka wysyła wyzwanie RFID 0x90 / 0x9E, odpowiadamy potwierdzeniem (Heartbeat ACK)
       if (val.length >= 3 && val[2] === 0x90) {
-        logMsg("Auto-odpowiedź na RFID challenge (0x91)...");
         sendPacket(0x91, [0x01], 10);
       }
-      // Drukarka wysyła status heartbeat
       if (val.length >= 3 && val[2] === 0xDC) {
         sendPacket(0xDD, [0x01], 10);
       }
@@ -269,8 +263,8 @@
         logMsg("Połączenie sesji (0xC1)...");
         await sendPacket(0xC1, [0x01], 60);
 
-        // 2. Inicjalizacja protokołu
-        await sendPacket(0x21, [0x03], 40); // Gęstość druku
+        // 2. Inicjalizacja parametrów
+        await sendPacket(0x21, [0x03], 40); // Gęstość
         await sendPacket(0x23, [0x01], 40); // Typ papieru (szczelina)
 
         // 3. Start zadania drukowania (1 strona)
@@ -310,10 +304,8 @@
           }
 
           if (!hasBlack) {
-            // Pusta linia Niimblue (0x84)
             await sendPacket(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01], 2);
           } else {
-            // Linia danych Niimblue (0x85)
             let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
             await sendPacket(0x85, payload, 3);
           }
@@ -324,18 +316,26 @@
           }
         }
 
-        // 8. Zakończenie strony
-        logMsg("Zamykanie bufora...");
+        // 8. Zakończenie strony (0xE3)
+        logMsg("Zamykanie bufora (0xE3)...");
         await sendPacket(0xE3, [0x01], 80);
 
-        // 9. Zakończenie zadania
-        logMsg("Zatwierdzanie wydruku...");
+        // 9. Potwierdzenie gotowości strony do druku (0x06)
+        logMsg("Zatwierdzenie strony (0x06)...");
+        await sendPacket(0x06, [0x01], 80);
+
+        // 10. Zakończenie zadania drukowania (0xF3)
+        logMsg("Koniec zadania (0xF3)...");
         await sendPacket(0xF3, [0x01], 100);
 
-        // 10. Wyzwolenie wykonania i synchronizacja
-        await sendPacket(0xD0, [0x01], 60);
+        // 11. Fizyczny start silnika i wypalenia (0xF5)
+        logMsg("Start silnika (0xF5)...");
+        await sendPacket(0xF5, [0x01], 150);
 
-        logMsg("Zakończono pomyślnie.");
+        // 12. Wysuw do krawędzi odrywania (0x0E)
+        await sendPacket(0x0E, [0x01], 50);
+
+        logMsg("Wydruk zrealizowany!");
       } catch (err) {
         logMsg("Błąd: " + err.message);
       } finally {
