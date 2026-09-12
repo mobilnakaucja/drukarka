@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drukarka ButelkoBus</title>
+  <!-- Oficjalna biblioteka NiimBlue + Generator QR -->
+  <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib/dist/niimbluelib.umd.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 16px; background: #f1f5f9; text-align: center; }
@@ -25,9 +27,9 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S_P (Rolka Ciągła)</h2>
+    <h2>Drukarka Niimbot (Silnik NiimBlueLib)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
-    <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z Niimbot B3S</button>
+    <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
   </div>
 
   <div class="card">
@@ -49,9 +51,7 @@
   </div>
 
   <script>
-    let bluetoothDevice = null;
-    let writeCharacteristic = null;
-    let notifyCharacteristic = null;
+    let client = null;
     let currentId = "";
     let currentDate = "";
     let currentNote = "";
@@ -154,89 +154,33 @@
       document.body.appendChild(script);
     }
 
-    function encodePacket(type, payload = []) {
-      const len = payload.length;
-      const raw = [0x55, 0x55, type, len, ...payload];
-      let cs = 0;
-      for (let i = 2; i < raw.length; i++) cs ^= raw[i];
-      raw.push(cs & 0xFF, 0xAA, 0xAA);
-      return new Uint8Array(raw);
-    }
-
-    async function sendPacket(type, payload = [], delay = 25) {
-      if (!writeCharacteristic) return;
-      const packet = encodePacket(type, payload);
-      const CHUNK = 20;
-      for (let i = 0; i < packet.length; i += CHUNK) {
-        const chunk = packet.slice(i, i + CHUNK);
-        if (writeCharacteristic.properties.writeWithoutResponse) {
-          await writeCharacteristic.writeValueWithoutResponse(chunk);
-        } else {
-          await writeCharacteristic.writeValueWithResponse(chunk);
-        }
-        await new Promise(r => setTimeout(r, 4));
-      }
-      if (delay > 0) await new Promise(r => setTimeout(r, delay));
-    }
-
-    function onDataReceived(event) {
-      const val = new Uint8Array(event.target.value.buffer);
-      if (val.length >= 3 && val[2] === 0x90) {
-        sendPacket(0x91, [0x01], 10);
-      }
-      if (val.length >= 3 && val[2] === 0xDC) {
-        sendPacket(0xDD, [0x01], 10);
-      }
-    }
-
     async function polaczZNiimbot() {
       try {
-        logMsg("Szukanie drukarki...");
-        bluetoothDevice = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [
-            "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
-            0xFFE0,
-            0xFEE7
-          ]
-        });
-
-        const server = await bluetoothDevice.gatt.connect();
-        logMsg("Połączono GATT. Konfiguracja kanałów...");
-
-        let service;
-        try {
-          service = await server.getPrimaryService("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
-        } catch(e) {
-          service = await server.getPrimaryService(0xFFE0);
+        logMsg("Inicjalizacja klienta NiimBlueLib...");
+        if (!window.niimbluelib) {
+          throw new Error("Biblioteka NiimBlueLib nie została załadowana!");
         }
 
-        const chars = await service.getCharacteristics();
-        writeCharacteristic = null;
-        notifyCharacteristic = null;
+        client = new niimbluelib.NiimbotBluetoothClient();
+        logMsg("Wybierz drukarkę z listy...");
+        await client.connect();
 
-        for (let c of chars) {
-          if (c.properties.write || c.properties.writeWithoutResponse) writeCharacteristic = c;
-          if (c.properties.notify || c.properties.indicate) notifyCharacteristic = c;
-        }
-
-        if (notifyCharacteristic) {
-          await notifyCharacteristic.startNotifications();
-          notifyCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-          logMsg("Nasłuchiwanie aktywne.");
-        }
+        logMsg("Pobieranie informacji o drukarce...");
+        await client.fetchPrinterInfo();
+        const info = client.getPrinterInfo();
+        logMsg("Połączono z: " + (info?.modelName || "Niimbot B3S"));
 
         const badge = document.getElementById('btStatus');
-        badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
+        badge.innerText = "Bluetooth: Połączono";
         badge.className = "status-badge status-on";
-        logMsg("Gotowy do pracy!");
+        logMsg("Drukarka gotowa do pracy!");
       } catch (err) {
         logMsg("Błąd połączenia: " + err.message);
       }
     }
 
     async function drukujEtykiete() {
-      if (!writeCharacteristic) {
+      if (!client || !client.isConnected()) {
         alert("Najpierw połącz z drukarką!");
         return;
       }
@@ -250,74 +194,37 @@
 
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
-      logMsg("--- START DRUKU (ROLKA CIĄGŁA) ---");
+      logMsg("--- START DRUKU PRZEZ NIIMBLUELIB ---");
       try {
-        // 1. Handshake connect
-        await sendPacket(0xC1, [0x01], 60);
+        client.stopHeartbeat();
+        client.setPacketInterval(10);
 
-        // 2. Konfiguracja papieru pod ROLKĘ CIĄGŁĄ (0x03 = Continuous)
-        logMsg("Ustawianie typu papieru: Ciągły (3)...");
-        await sendPacket(0x23, [0x03], 40); // LabelType: Continuous
-        await sendPacket(0x33, [0x03], 40); // SetLabelType alternate
-        await sendPacket(0x21, [0x03], 40); // Gęstość
+        // Tworzymy natywne zadanie druku NiimBlue
+        // labelType: 3 (Continuous / rolka ciągła)
+        logMsg("Tworzenie zadania wydruku...");
+        const task = client.createPrintTask({
+          totalPages: 1,
+          density: 3,
+          labelType: 3
+        });
 
-        // 3. Start zadania drukowania (1 strona)
-        await sendPacket(0x01, [0x00, 0x01], 60);
-
-        // 4. Początek strony
-        await sendPacket(0x03, [0x01], 60);
-
-        // 5. Geometria: Wysokość (240 = 0x00F0), Szerokość (384 = 0x0180)
-        await sendPacket(0x13, [0x00, 0xF0, 0x01, 0x80], 60);
-        await sendPacket(0x15, [0x00, 0x01], 40);
-
-        // 6. Przesyłanie wierszy rastra
-        logMsg("Transmisja danych...");
-        const widthBytes = 48; // 384 / 8
-
-        for (let y = 0; y < 240; y++) {
-          let lineBytes = new Uint8Array(widthBytes);
-          let rowBlack = 0;
-
-          for (let x = 0; x < 384; x++) {
-            let idx = (y * 384 + x) * 4;
-            let r = imgData[idx];
-            let g = imgData[idx + 1];
-            let b = imgData[idx + 2];
-            let a = imgData[idx + 3];
-
-            if (a > 128 && ((r + g + b) / 3 < 128)) {
-              lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
-              rowBlack++;
-            }
-          }
-
-          if (rowBlack === 0) {
-            await sendPacket(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01], 2);
-          } else {
-            let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
-            await sendPacket(0x85, payload, 3);
-          }
-
-          if (y % 40 === 0) {
-            logMsg("Linia " + y + "/240");
-            await new Promise(r => setTimeout(r, 6));
-          }
+        if (!task) {
+          throw new Error("Nie udało się utworzyć zadania druku dla tego modelu.");
         }
 
-        // 7. Zakończenie strony i zadania
-        await sendPacket(0xE3, [0x01], 80);
-        await sendPacket(0x06, [0x01], 80);
-        await sendPacket(0xF3, [0x01], 100);
+        logMsg("Inicjalizacja głowicy termicznej...");
+        await task.printInit();
 
-        // 8. Fizyczne wyzwolenie silnika i grzania
-        logMsg("Fizyczne grzanie i wysuw...");
-        await sendPacket(0xF5, [0x01], 150);
-        await sendPacket(0x0E, [0x01], 50);
+        // Konwersja canvasu na format oczekiwany przez NiimBlueLib
+        logMsg("Wysyłanie strony...");
+        await task.printPage(canvas, 1);
 
-        logMsg("Wydruk zrealizowany!");
+        logMsg("Oczekiwanie na zakończenie wydruku...");
+        await task.waitForFinished();
+
+        client.startHeartbeat();
+        logMsg("Wydruk zrealizowany pomyślnie!");
       } catch (err) {
         logMsg("Błąd: " + err.message);
       } finally {
