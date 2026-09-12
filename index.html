@@ -256,40 +256,41 @@
 
       logMsg("--- START DRUKU ---");
       try {
-        // 1. Wybudzenie i status
-        await wyslij(zbudujPakiet(0xA3, [0x01]));
+        // 1. Reset / Wakeup / Clear Error Flag (0xFA lub 0xDC)
+        await wyslij(zbudujPakiet(0xFA, [0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        // 2. Ustawienie gęstości druku (0x21: poziom 3 - moc grzałki)
-        await wyslij(zbudujPakiet(0x21, [0x03]));
-        await new Promise(r => setTimeout(r, 50));
-
-        // 3. Typ papieru (0x23: 1 = etykieta z przerwą)
+        // 2. Ustawienie typu papieru: 0x02 (Transparent/Continuous) lub 0x01 (Gap)
+        // Wymuszamy 0x01 z jawnym kodem 1 etykiety
         await wyslij(zbudujPakiet(0x23, [0x01]));
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setTimeout(r, 40));
 
-        // 4. Start zadania (1 kopia)
+        // 3. Gęstość druku (0x21: poziom 3)
+        await wyslij(zbudujPakiet(0x21, [0x03]));
+        await new Promise(r => setTimeout(r, 40));
+
+        // 4. Start zadania druku (1 kopia)
         logMsg("Start zadania...");
         await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 5. Start strony
+        // 5. Start strony (1)
         logMsg("Start strony...");
         await wyslij(zbudujPakiet(0x03, [0x01]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 6. Wymiary: Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
-        logMsg("Wymiary 384x240 (0x13)...");
+        // 6. SetPageSize (0x13): Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
+        logMsg("Wymiary 384x240...");
         await wyslij(zbudujPakiet(0x13, [0x01, 0x80, 0x00, 0xF0]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 7. Ilość sztuk (0x15: 1)
+        // 7. Liczba kopii strony (1)
         await wyslij(zbudujPakiet(0x15, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        // 8. Wysyłanie rastra
+        // 8. RASTER: wysyłanie linii rastra
         logMsg("Wysyłanie linii...");
-        const widthBytes = 48;
+        const widthBytes = 48; // 384 / 8
         let totalBlack = 0;
 
         for (let y = 0; y < 240; y++) {
@@ -326,22 +327,22 @@
 
         logMsg("Zbuforowano pikseli: " + totalBlack);
 
-        // 9. Zakończenie strony
-        logMsg("Zamykanie strony...");
+        // 9. Koniec strony (0xE3)
+        logMsg("Koniec strony (0xE3)...");
         await wyslij(zbudujPakiet(0xE3, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 10. Zakończenie zadania
-        logMsg("Zamykanie zadania...");
+        // 10. Koniec zadania (0xF3)
+        logMsg("Koniec zadania (0xF3)...");
         await wyslij(zbudujPakiet(0xF3, [0x01]));
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 150));
 
-        // 11. Wyzwolenie wykonania (0xD0) i wysuw papieru do szczeliny (0x0E)
-        logMsg("Wysuwanie i druk (0xD0 + 0x0E)...");
-        await wyslij(zbudujPakiet(0xD0, [0x01]));
-        await new Promise(r => setTimeout(r, 100));
-        
-        await wyslij(zbudujPakiet(0x0E, [0x01]));
+        // 11. Wyzwolenie fizycznego druku bufora (Print Page Buffer Execution)
+        // W firmware B3S/B21: komenda 0xF5 z parametrem 0x01 uruchamia właściwy wydruk sprzętowy
+        logMsg("Wymuszenie wydruku (0xF5)...");
+        await wyslij(zbudujPakiet(0xF5, [0x01]));
+        await new Promise(r => setTimeout(r, 150));
+
         logMsg("Zlecenie zakończone.");
 
       } catch (err) {
