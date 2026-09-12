@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drukarka ButelkoBus</title>
   
-  <!-- Oficjalna biblioteka NiimBlue (wersja UMD z README repozytorium) -->
+  <!-- Oficjalny silnik NiimBlue UMD -->
   <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/dist/umd/niimbluelib.min.js"></script>
   <!-- Generator QR -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -67,14 +67,13 @@
       }
     }
 
-    // Sprawdzenie czy NiimBlue się wczytał
     window.onload = function() {
       pobierzOstatniParagon();
       const box = document.getElementById('debugBox');
       if (window.niimbluelib) {
         box.innerText = "Silnik NiimBlue gotowy! Kliknij 'Połącz z drukarką'.";
       } else {
-        box.innerText = "Uwaga: Odśwież stronę (brak połączenia z biblioteką).";
+        box.innerText = "Błąd: Odśwież stronę (brak połączenia z biblioteką).";
       }
     };
 
@@ -173,7 +172,7 @@
     async function polaczZNiimbot() {
       try {
         if (!window.niimbluelib) {
-          alert("Poczekaj sekundę na bibliotekę lub odśwież stronę.");
+          alert("Poczekaj chwilę na bibliotekę lub odśwież stronę.");
           return;
         }
 
@@ -213,39 +212,32 @@
       logMsg("--- START DRUKU NIIMBLUE ---");
       try {
         const lib = window.niimbluelib;
-        let task = null;
 
-        // Auto-detekcja poprawnej fabryki PrintTask w zainstalowanej wersji biblioteki
-        const taskOptions = {
+        // 1. Kodowanie canvasu przez ImageEncoder (wymagane w NiimBlue)
+        logMsg("Kodowanie grafiki...");
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
+
+        // 2. Pobranie typu zadania lub fallback na sterownik B-series
+        const taskType = printerClient.getPrintTaskType() ?? "B1";
+        logMsg("Tworzenie zadania: " + taskType);
+
+        // 3. Wywołanie natywnego zadania przez abstraction layer
+        const printTask = printerClient.abstraction.newPrintTask(taskType, {
           totalPages: 1,
-          density: 3,
-          labelType: 3 // Continuous / rolka ciągła
-        };
+          statusPollIntervalMs: 100,
+          statusTimeoutMs: 8000
+        });
 
-        if (typeof printerClient.createPrintTask === 'function') {
-          task = printerClient.createPrintTask(taskOptions);
-        } else if (lib.PrintTaskFactory && typeof lib.PrintTaskFactory.create === 'function') {
-          task = lib.PrintTaskFactory.create(printerClient, taskOptions);
-        } else if (typeof lib.PrintTask === 'function') {
-          task = new lib.PrintTask(printerClient, taskOptions);
-        } else if (typeof lib.createPrintTask === 'function') {
-          task = lib.createPrintTask(printerClient, taskOptions);
-        } else {
-          // Inspekcja dostępnych obiektów w razie innej struktury bundla
-          const keys = Object.keys(lib).filter(k => k.toLowerCase().includes("print"));
-          logMsg("Dostępne moduły: " + keys.join(", "));
-          throw new Error("Nie znaleziono konstruktora PrintTask (sprawdź moduły wyżej)");
-        }
+        logMsg("Inicjalizacja głowicy...");
+        await printTask.printInit();
 
-        logMsg("Inicjalizacja zadania druku...");
-        await task.printInit();
+        logMsg("Wypalanie etykiety...");
+        await printTask.printPage(encoded, 1);
 
-        logMsg("Wypalanie etykiety do grzałki...");
-        await task.printPage(canvas, 1);
+        logMsg("Czekam na zakończenie...");
+        await printTask.waitForFinished();
 
-        logMsg("Oczekiwanie na zakończenie...");
-        await task.waitForFinished();
-
+        await printerClient.abstraction.printEnd();
         logMsg("Wydruk zrealizowany!");
       } catch (err) {
         logMsg("Błąd druku: " + err.message);
