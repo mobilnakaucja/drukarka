@@ -237,4 +237,243 @@
     window.onload = pobierzOstatniParagon;
   </script>
 </body>
+</html><!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drukarka ButelkoBus</title>
+  <!-- Tradycyjny bundle UMD - ładuje się natychmiast bez blokad CORS -->
+  <script src="https://unpkg.com/@mmote/niimbluelib@0.1.13/dist/niimbluelib.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 16px; background: #f1f5f9; text-align: center; }
+    .card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    h2 { margin-top: 0; color: #0f172a; font-size: 19px; }
+    .status-badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 14px; margin-bottom: 12px; }
+    .status-off { background: #fee2e2; color: #b91c1c; }
+    .status-on { background: #dcfce7; color: #15803d; }
+    button { width: 100%; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 8px; margin: 8px 0; cursor: pointer; }
+    .btn-bt { background: #2563eb; color: white; }
+    .btn-print { background: #16a34a; color: white; font-size: 20px; padding: 18px; }
+    .btn-refresh { background: #e2e8f0; color: #334155; }
+    .btn-cfg { background: none; border: 1px dashed #94a3b8; color: #64748b; font-size: 12px; padding: 8px; }
+    #previewCanvas { border: 2px dashed #94a3b8; background: white; margin-top: 10px; width: 100%; max-width: 320px; height: auto; }
+    .info-box { font-size: 15px; color: #334155; margin: 8px 0; text-align: left; background: #f8fafc; padding: 10px; border-radius: 6px; }
+    #debugBox { background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; text-align: left; max-height: 140px; overflow-y: auto; margin-top: 10px; white-space: pre-wrap; word-break: break-all; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Drukarka Niimbot B3S_P (NiimBlue)</h2>
+    <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
+    <button class="btn-bt" id="btnConnect" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
+  </div>
+
+  <div class="card">
+    <h2>Ostatni Paragon</h2>
+    <button class="btn-refresh" onclick="pobierzOstatniParagon()">🔄 Odśwież dane</button>
+    <div class="info-box">
+      <div><strong>ID:</strong> <span id="lblId">Pobieranie...</span></div>
+      <div><strong>Data:</strong> <span id="lblDate">-</span></div>
+      <div><strong>Worek:</strong> <span id="lblNote">-</span></div>
+    </div>
+    
+    <canvas id="previewCanvas" width="384" height="240"></canvas>
+    
+    <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
+    
+    <div id="debugBox">Inicjalizacja...</div>
+
+    <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
+  </div>
+
+  <script>
+    let printerClient = null;
+    let currentId = "";
+    let currentDate = "";
+    let currentNote = "";
+
+    function logMsg(msg) {
+      const box = document.getElementById('debugBox');
+      box.innerText += "\n" + msg;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // Sprawdzenie stanu załadowania biblioteki od razu przy starcie
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.niimbluelib) {
+        logMsg("Silnik NiimBlue załadowany poprawnie.");
+      } else {
+        logMsg("Błąd: nie udało się pobrać pliku biblioteki.");
+      }
+    });
+
+    function odrysujEtykiete(idParagonu, dataParagonu, nrWorka) {
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 384, 240);
+
+      ctx.fillStyle = "#000000";
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText("BUTELKOBUS", 195, 45);
+
+      ctx.font = "12px sans-serif";
+      ctx.fillText("Data odbioru:", 195, 75);
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(dataParagonu || "-", 195, 95);
+
+      if (nrWorka && nrWorka !== "Brak") {
+        ctx.font = "12px sans-serif";
+        ctx.fillText("Worek:", 195, 125);
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText(nrWorka, 195, 145);
+      }
+
+      ctx.font = "12px sans-serif";
+      ctx.fillText("ID Paragonu:", 195, 175);
+      ctx.font = "bold 16px monospace";
+
+      let parts = (idParagonu || "").split('/');
+      if (parts.length > 1) {
+        ctx.fillText(parts[0], 195, 195);
+        ctx.font = "bold 20px monospace";
+        ctx.fillText(parts[1], 195, 220);
+      } else {
+        ctx.fillText(idParagonu || "-", 195, 205);
+      }
+
+      if (idParagonu && idParagonu !== "Brak" && window.QRCode) {
+        const tempCanvas = document.createElement('canvas');
+        QRCode.toCanvas(tempCanvas, idParagonu, { width: 175, margin: 1 }, function (err) {
+          if (!err) {
+            ctx.drawImage(tempCanvas, 10, 30);
+          }
+        });
+      }
+    }
+
+    function konfigurujPolaczenie() {
+      let url = prompt("Wklej link wdrożenia Apps Script (/exec):", localStorage.getItem("bb_url") || "");
+      if (url) localStorage.setItem("bb_url", url.trim());
+      let key = prompt("Wpisz swój tajny PIN / Klucz:", localStorage.getItem("bb_key") || "");
+      if (key) localStorage.setItem("bb_key", key.trim());
+      pobierzOstatniParagon();
+    }
+
+    function pobierzOstatniParagon() {
+      let url = localStorage.getItem("bb_url");
+      let key = localStorage.getItem("bb_key");
+      
+      if (!url || !key) {
+        document.getElementById('lblId').innerText = "Kliknij ⚙️ Ustawienia poniżej";
+        return;
+      }
+
+      let starySkrypt = document.getElementById("jsonp_script");
+      if (starySkrypt) starySkrypt.remove();
+
+      window.obsluzDaneParagonu = function(json) {
+        if (json.status === "ok") {
+          currentId = json.customId;
+          currentDate = json.date;
+          currentNote = json.note || "Brak";
+          document.getElementById('lblId').innerText = currentId;
+          document.getElementById('lblDate').innerText = currentDate;
+          document.getElementById('lblNote').innerText = currentNote;
+          odrysujEtykiete(currentId, currentDate, currentNote);
+        } else {
+          document.getElementById('lblId').innerText = "Błąd: " + (json.message || "Brak autoryzacji");
+        }
+      };
+
+      let separator = url.indexOf('?') !== -1 ? '&' : '?';
+      let fullUrl = url + separator + "key=" + encodeURIComponent(key) + "&callback=obsluzDaneParagonu&_ts=" + new Date().getTime();
+
+      let script = document.createElement("script");
+      script.id = "jsonp_script";
+      script.src = fullUrl;
+      script.onerror = function() {
+        document.getElementById('lblId').innerText = "Błąd sieci lub zły URL";
+      };
+      document.body.appendChild(script);
+    }
+
+    async function polaczZNiimbot() {
+      try {
+        if (!window.niimbluelib) {
+          alert("Biblioteka jeszcze się nie pobrała. Odśwież stronę.");
+          return;
+        }
+
+        logMsg("Szukanie drukarki Bluetooth...");
+        
+        // Utworzenie klienta z biblioteki UMD
+        printerClient = new window.niimbluelib.NiimbotBluetoothClient();
+
+        // Otwiera natywne okno wyboru BLE
+        await printerClient.connect();
+
+        logMsg("Odpytywanie drukarki o konfigurację...");
+        await printerClient.fetchPrinterInfo();
+        const info = printerClient.getPrinterInfo();
+
+        const badge = document.getElementById('btStatus');
+        badge.innerText = "Bluetooth: " + (info?.modelName || "Połączono");
+        badge.className = "status-badge status-on";
+        logMsg("Połączono z: " + (info?.modelName || "Niimbot") + "! Gotowy.");
+
+      } catch (err) {
+        logMsg("Błąd połączenia: " + err.message);
+      }
+    }
+
+    async function drukujEtykiete() {
+      if (!printerClient || !printerClient.isConnected()) {
+        alert("Najpierw połącz z drukarką!");
+        return;
+      }
+
+      const btn = document.getElementById('btnPrint');
+      btn.disabled = true;
+
+      const idDoDruku = currentId || document.getElementById('lblId').innerText;
+      odrysujEtykiete(idDoDruku, currentDate, currentNote);
+      await new Promise(r => setTimeout(r, 100));
+
+      const canvas = document.getElementById('previewCanvas');
+
+      logMsg("--- START DRUKU NIIMBLUE ---");
+      try {
+        // labelType 3 / 'Continuous' = papier ciągły
+        logMsg("Tworzenie zadania druku...");
+        const task = printerClient.createPrintTask({
+          totalPages: 1,
+          density: 3,
+          labelType: 3
+        });
+
+        logMsg("Inicjalizacja głowicy...");
+        await task.printInit();
+
+        logMsg("Wypalanie etykiety...");
+        await task.printPage(canvas, 1);
+
+        logMsg("Zakańczanie zadania...");
+        await task.waitForFinished();
+
+        logMsg("Wydruk zrealizowany!");
+      } catch (err) {
+        logMsg("Błąd wydruku: " + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    window.onload = pobierzOstatniParagon;
+  </script>
+</body>
 </html>
