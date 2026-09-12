@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drukarka ButelkoBus</title>
-  <!-- Oficjalna biblioteka NiimBlue + Generator QR -->
-  <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib/dist/niimbluelib.umd.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 16px; background: #f1f5f9; text-align: center; }
@@ -27,9 +25,9 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot (Silnik NiimBlueLib)</h2>
+    <h2>Drukarka Niimbot B3S_P (NiimBlue Engine)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
-    <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
+    <button class="btn-bt" id="btnConnect" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
   </div>
 
   <div class="card">
@@ -45,21 +43,32 @@
     
     <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
     
-    <div id="debugBox">Gotowy do pracy...</div>
+    <div id="debugBox">Ładowanie silnika NiimBlue...</div>
 
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
 
+  <script type="module">
+    import * as niimbluelib from "https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@0.1.13/+esm";
+
+    window.niimbluelib = niimbluelib;
+    window.logMsg = function(msg) {
+      const box = document.getElementById('debugBox');
+      box.innerText += "\n" + msg;
+      box.scrollTop = box.scrollHeight;
+    };
+
+    window.client = null;
+    window.logMsg("Silnik NiimBlue gotowy. Kliknij połącz.");
+  </script>
+
   <script>
-    let client = null;
     let currentId = "";
     let currentDate = "";
     let currentNote = "";
 
     function logMsg(msg) {
-      const box = document.getElementById('debugBox');
-      box.innerText += "\n" + msg;
-      box.scrollTop = box.scrollHeight;
+      if (window.logMsg) window.logMsg(msg);
     }
 
     function odrysujEtykiete(idParagonu, dataParagonu, nrWorka) {
@@ -156,31 +165,32 @@
 
     async function polaczZNiimbot() {
       try {
-        logMsg("Inicjalizacja klienta NiimBlueLib...");
         if (!window.niimbluelib) {
-          throw new Error("Biblioteka NiimBlueLib nie została załadowana!");
+          alert("Poczekaj sekundę na załadowanie biblioteki...");
+          return;
         }
 
-        client = new niimbluelib.NiimbotBluetoothClient();
-        logMsg("Wybierz drukarkę z listy...");
-        await client.connect();
+        logMsg("Szukanie drukarki Bluetooth...");
+        window.client = new window.niimbluelib.NiimbotBluetoothClient();
+        
+        await window.client.connect();
 
-        logMsg("Pobieranie informacji o drukarce...");
-        await client.fetchPrinterInfo();
-        const info = client.getPrinterInfo();
-        logMsg("Połączono z: " + (info?.modelName || "Niimbot B3S"));
-
+        logMsg("Odpytywanie drukarki o model i głowicę...");
+        await window.client.fetchPrinterInfo();
+        const info = window.client.getPrinterInfo();
+        
         const badge = document.getElementById('btStatus');
-        badge.innerText = "Bluetooth: Połączono";
+        badge.innerText = "Bluetooth: " + (info?.modelName || "Połączono");
         badge.className = "status-badge status-on";
-        logMsg("Drukarka gotowa do pracy!");
+        logMsg("Połączono z " + (info?.modelName || "Niimbot") + "! Gotowy do pracy.");
+
       } catch (err) {
-        logMsg("Błąd połączenia: " + err.message);
+        logMsg("Błąd: " + err.message);
       }
     }
 
     async function drukujEtykiete() {
-      if (!client || !client.isConnected()) {
+      if (!window.client || !window.client.isConnected()) {
         alert("Najpierw połącz z drukarką!");
         return;
       }
@@ -193,40 +203,28 @@
       await new Promise(r => setTimeout(r, 100));
 
       const canvas = document.getElementById('previewCanvas');
-      const ctx = canvas.getContext('2d');
 
-      logMsg("--- START DRUKU PRZEZ NIIMBLUELIB ---");
+      logMsg("--- START DRUKU NIIMBLUE ---");
       try {
-        client.stopHeartbeat();
-        client.setPacketInterval(10);
-
-        // Tworzymy natywne zadanie druku NiimBlue
-        // labelType: 3 (Continuous / rolka ciągła)
-        logMsg("Tworzenie zadania wydruku...");
-        const task = client.createPrintTask({
+        // labelType 3 to Continuous (rolka ciągła bez przerw)
+        const task = window.client.createPrintTask({
           totalPages: 1,
           density: 3,
           labelType: 3
         });
 
-        if (!task) {
-          throw new Error("Nie udało się utworzyć zadania druku dla tego modelu.");
-        }
-
-        logMsg("Inicjalizacja głowicy termicznej...");
+        logMsg("Inicjalizacja wydruku...");
         await task.printInit();
 
-        // Konwersja canvasu na format oczekiwany przez NiimBlueLib
-        logMsg("Wysyłanie strony...");
+        logMsg("Wysyłanie etykiety do grzałki...");
         await task.printPage(canvas, 1);
 
-        logMsg("Oczekiwanie na zakończenie wydruku...");
+        logMsg("Oczekiwanie na zakończenie...");
         await task.waitForFinished();
 
-        client.startHeartbeat();
-        logMsg("Wydruk zrealizowany pomyślnie!");
+        logMsg("Sukces! Etykieta wydrukowana.");
       } catch (err) {
-        logMsg("Błąd: " + err.message);
+        logMsg("Błąd druku: " + err.message);
       } finally {
         btn.disabled = false;
       }
