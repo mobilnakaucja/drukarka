@@ -25,7 +25,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S_P (NiimBlue Core)</h2>
+    <h2>Drukarka Niimbot B3S_P (Rolka Ciągła)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z Niimbot B3S</button>
   </div>
@@ -154,7 +154,6 @@
       document.body.appendChild(script);
     }
 
-    // --- ENKAPSULACJA PAKIETÓW ZGODNA Z NIIMBLUE ---
     function encodePacket(type, payload = []) {
       const len = payload.length;
       const raw = [0x55, 0x55, type, len, ...payload];
@@ -203,7 +202,7 @@
         });
 
         const server = await bluetoothDevice.gatt.connect();
-        logMsg("Połączono GATT. Wykrywanie usług...");
+        logMsg("Połączono GATT. Konfiguracja kanałów...");
 
         let service;
         try {
@@ -224,13 +223,13 @@
         if (notifyCharacteristic) {
           await notifyCharacteristic.startNotifications();
           notifyCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-          logMsg("Maszyna stanów NiimBlue aktywna.");
+          logMsg("Nasłuchiwanie aktywne.");
         }
 
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
         badge.className = "status-badge status-on";
-        logMsg("Gotowy do druku!");
+        logMsg("Gotowy do pracy!");
       } catch (err) {
         logMsg("Błąd połączenia: " + err.message);
       }
@@ -253,34 +252,30 @@
       const ctx = canvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
-      logMsg("--- START DRUKU (Protokół NiimBlue) ---");
+      logMsg("--- START DRUKU (ROLKA CIĄGŁA) ---");
       try {
-        // 1. Handshake connect (0xC1)
+        // 1. Handshake connect
         await sendPacket(0xC1, [0x01], 60);
 
-        // 2. Zapytanie o status głowicy (0xA3)
-        await sendPacket(0xA3, [0x01], 40);
+        // 2. Konfiguracja papieru pod ROLKĘ CIĄGŁĄ (0x03 = Continuous)
+        logMsg("Ustawianie typu papieru: Ciągły (3)...");
+        await sendPacket(0x23, [0x03], 40); // LabelType: Continuous
+        await sendPacket(0x33, [0x03], 40); // SetLabelType alternate
+        await sendPacket(0x21, [0x03], 40); // Gęstość
 
-        // 3. Konfiguracja grzałki: Gęstość (0x21: poziom 3) i Typ etykiety (0x23: 0x01 Gap)
-        await sendPacket(0x21, [0x03], 40);
-        await sendPacket(0x23, [0x01], 40);
-
-        // 4. Start zadania (0x01: 1 strona)
-        logMsg("Start job...");
+        // 3. Start zadania drukowania (1 strona)
         await sendPacket(0x01, [0x00, 0x01], 60);
 
-        // 5. Start strony (0x03)
+        // 4. Początek strony
         await sendPacket(0x03, [0x01], 60);
 
-        // 6. Rozmiar strony (0x13): Wysokość 240 (0x00F0), Szerokość 384 (0x0180)
-        logMsg("Wymiary 240x384...");
+        // 5. Geometria: Wysokość (240 = 0x00F0), Szerokość (384 = 0x0180)
         await sendPacket(0x13, [0x00, 0xF0, 0x01, 0x80], 60);
         await sendPacket(0x15, [0x00, 0x01], 40);
 
-        // 7. Raster NiimBlue: linie 384 px (48 bajtów)
-        logMsg("Przesyłanie wierszy rastra...");
-        const widthBytes = 48;
-        let blackTotal = 0;
+        // 6. Przesyłanie wierszy rastra
+        logMsg("Transmisja danych...");
+        const widthBytes = 48; // 384 / 8
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
@@ -299,41 +294,27 @@
             }
           }
 
-          blackTotal += rowBlack;
-
           if (rowBlack === 0) {
-            // Pusta linia (0x84): numer wiersza Big-Endian, 1 powtórzenie
             await sendPacket(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01], 2);
           } else {
-            // Linia z danymi (0x85): numer wiersza Big-Endian, 1 powtórzenie, bajty pikseli
             let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
             await sendPacket(0x85, payload, 3);
           }
 
           if (y % 40 === 0) {
-            logMsg("Wiersz " + y + "/240");
+            logMsg("Linia " + y + "/240");
             await new Promise(r => setTimeout(r, 6));
           }
         }
 
-        logMsg("Zbuforowano pikseli: " + blackTotal);
-
-        // 8. Zakończenie strony (0xE3)
-        logMsg("Koniec strony...");
+        // 7. Zakończenie strony i zadania
         await sendPacket(0xE3, [0x01], 80);
-
-        // 9. Potwierdzenie gotowości (0x06)
         await sendPacket(0x06, [0x01], 80);
-
-        // 10. Koniec zadania (0xF3)
-        logMsg("Koniec zadania...");
         await sendPacket(0xF3, [0x01], 100);
 
-        // 11. Start silnika i zasilania grzałki (0xF5)
-        logMsg("Wyzwalanie wydruku (0xF5)...");
+        // 8. Fizyczne wyzwolenie silnika i grzania
+        logMsg("Fizyczne grzanie i wysuw...");
         await sendPacket(0xF5, [0x01], 150);
-
-        // 12. Wysuw do odrywania (0x0E)
         await sendPacket(0x0E, [0x01], 50);
 
         logMsg("Wydruk zrealizowany!");
