@@ -258,28 +258,36 @@
       try {
         // 1. Wybudzenie i status
         await wyslij(zbudujPakiet(0xA3, [0x01]));
-        await new Promise(r => setTimeout(r, 60));
+        await new Promise(r => setTimeout(r, 50));
 
-        // 2. Start zadania (1 kopia)
+        // 2. Ustawienie gęstości druku (0x21: poziom 3 - moc grzałki)
+        await wyslij(zbudujPakiet(0x21, [0x03]));
+        await new Promise(r => setTimeout(r, 50));
+
+        // 3. Typ papieru (0x23: 1 = etykieta z przerwą)
+        await wyslij(zbudujPakiet(0x23, [0x01]));
+        await new Promise(r => setTimeout(r, 50));
+
+        // 4. Start zadania (1 kopia)
         logMsg("Start zadania...");
         await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 3. Start strony
+        // 5. Start strony
         logMsg("Start strony...");
         await wyslij(zbudujPakiet(0x03, [0x01]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 4. Wymiary: Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
+        // 6. Wymiary: Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
         logMsg("Wymiary 384x240 (0x13)...");
         await wyslij(zbudujPakiet(0x13, [0x01, 0x80, 0x00, 0xF0]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 5. Ilość sztuk (0x15: 1)
+        // 7. Ilość sztuk (0x15: 1)
         await wyslij(zbudujPakiet(0x15, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        // 6. Wysyłanie rastra
+        // 8. Wysyłanie rastra
         logMsg("Wysyłanie linii...");
         const widthBytes = 48;
         let totalBlack = 0;
@@ -318,23 +326,21 @@
 
         logMsg("Zbuforowano pikseli: " + totalBlack);
 
-        // 7. Zakończenie strony
+        // 9. Zakończenie strony
         logMsg("Zamykanie strony...");
         await wyslij(zbudujPakiet(0xE3, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 8. Zakończenie zadania
+        // 10. Zakończenie zadania
         logMsg("Zamykanie zadania...");
         await wyslij(zbudujPakiet(0xF3, [0x01]));
-        await new Promise(r => setTimeout(r, 150));
-
-        // 9. Komenda wyzwolenia wydruku i wysunięcia (Trigger Print Execution)
-        logMsg("Wyzwalanie silnika...");
-        // 0xD0: Zapytanie o status wykonania druku (wyzwala fizyczny start w B3S_P)
-        await wyslij(zbudujPakiet(0xD0, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 0x0E: Wysuw do szczeliny
+        // 11. Wyzwolenie wykonania (0xD0) i wysuw papieru do szczeliny (0x0E)
+        logMsg("Wysuwanie i druk (0xD0 + 0x0E)...");
+        await wyslij(zbudujPakiet(0xD0, [0x01]));
+        await new Promise(r => setTimeout(r, 100));
+        
         await wyslij(zbudujPakiet(0x0E, [0x01]));
         logMsg("Zlecenie zakończone.");
 
