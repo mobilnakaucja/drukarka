@@ -194,7 +194,7 @@
       }
     }
 
-    async function drukujEtykiete() {
+   async function drukujEtykiete() {
       if (!printerClient || !printerClient.isConnected()) {
         alert("Najpierw kliknij: Połącz z drukarką!");
         return;
@@ -213,9 +213,9 @@
       try {
         const lib = window.niimbluelib;
 
-        // 1. Kodowanie z wyraźnym kolorem 'black' (nigdy 'left'!)
-        logMsg("Kodowanie grafiki (black)...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "black");
+        // 1. Prawidłowe kodowanie z kierunkiem druku "left" (lub "top")
+        logMsg("Kodowanie grafiki...");
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
 
         // 2. Pobranie dedykowanego typu zadania
         const taskType = printerClient.getPrintTaskType() ?? "B1";
@@ -231,8 +231,9 @@
         logMsg("Inicjalizacja głowicy...");
         await printTask.printInit();
 
+        // 4. Prawidłowe wywołanie: pierwszy argument to obraz, drugi to kolor "black"!
         logMsg("Wypalanie etykiety...");
-        await printTask.printPage(encoded, 1);
+        await printTask.printPage(encoded, "black");
 
         logMsg("Czekam na zakończenie...");
         await printTask.waitForFinished();
