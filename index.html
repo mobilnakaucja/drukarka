@@ -256,9 +256,9 @@
 
       logMsg("--- START DRUKU ---");
       try {
-        // 1. Status zapytania
+        // 1. Wybudzenie i status
         await wyslij(zbudujPakiet(0xA3, [0x01]));
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setTimeout(r, 60));
 
         // 2. Start zadania (1 kopia)
         logMsg("Start zadania...");
@@ -270,19 +270,18 @@
         await wyslij(zbudujPakiet(0x03, [0x01]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 4. Prawidłowa deklaracja wymiarów dla B3S:
-        // Szerokość: 384 px (0x01, 0x80) | Wysokość: 240 px (0x00, 0xF0)
+        // 4. Wymiary: Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
         logMsg("Wymiary 384x240 (0x13)...");
         await wyslij(zbudujPakiet(0x13, [0x01, 0x80, 0x00, 0xF0]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 5. Ilość sztuk
+        // 5. Ilość sztuk (0x15: 1)
         await wyslij(zbudujPakiet(0x15, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        // 6. Wysyłanie 240 linii grafiki
+        // 6. Wysyłanie rastra
         logMsg("Wysyłanie linii...");
-        const widthBytes = 48; // 384 / 8
+        const widthBytes = 48;
         let totalBlack = 0;
 
         for (let y = 0; y < 240; y++) {
@@ -304,43 +303,45 @@
           }
 
           if (!hasBlack) {
-            // Pusta linia (0x84): numer linii H, L, 1 powtórzenie
             await wyslij(zbudujPakiet(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01]));
           } else {
-            // Linia z danymi (0x85): numer linii H, L, 1 powtórzenie, bajty pikseli
             let linePayload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
             await wyslij(zbudujPakiet(0x85, linePayload));
           }
 
-          if (y % 40 === 0) {
-            logMsg("Linia: " + y + "/240");
+          if (y % 50 === 0) {
             await new Promise(r => setTimeout(r, 6));
           } else {
             await new Promise(r => setTimeout(r, 2));
           }
         }
 
-        logMsg("Suma pikseli: " + totalBlack);
+        logMsg("Zbuforowano pikseli: " + totalBlack);
 
-        // 7. Koniec strony (0xE3)
+        // 7. Zakończenie strony
         logMsg("Zamykanie strony...");
         await wyslij(zbudujPakiet(0xE3, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 8. Koniec zadania (0xF3)
-        logMsg("Koniec zadania...");
+        // 8. Zakończenie zadania
+        logMsg("Zamykanie zadania...");
         await wyslij(zbudujPakiet(0xF3, [0x01]));
+        await new Promise(r => setTimeout(r, 150));
+
+        // 9. Komenda wyzwolenia wydruku i wysunięcia (Trigger Print Execution)
+        logMsg("Wyzwalanie silnika...");
+        // 0xD0: Zapytanie o status wykonania druku (wyzwala fizyczny start w B3S_P)
+        await wyslij(zbudujPakiet(0xD0, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 9. Fizyczny wysuw etykiety (Form Feed 0x0E)
-        logMsg("Wysuwanie etykiety (0x0E)...");
+        // 0x0E: Wysuw do szczeliny
         await wyslij(zbudujPakiet(0x0E, [0x01]));
+        logMsg("Zlecenie zakończone.");
 
       } catch (err) {
         logMsg("Błąd druku: " + err.message);
       }
     }
-
     window.onload = pobierzOstatniParagon;
   </script>
 </body>
