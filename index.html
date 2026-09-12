@@ -256,17 +256,17 @@
 
       logMsg("--- START DRUKU ---");
       try {
-        // 1. Reset / Wakeup / Clear Error Flag (0xFA lub 0xDC)
-        await wyslij(zbudujPakiet(0xFA, [0x01]));
-        await new Promise(r => setTimeout(r, 50));
+        // 1. Wyłączenie weryfikacji RFID / Ustawienie papieru uniwersalnego (Generic Label)
+        logMsg("Odblokowanie RFID (0xB0)...");
+        await wyslij(zbudujPakiet(0xB0, [0x00])); // 0x00 = wyłącz rygor RFID
+        await new Promise(r => setTimeout(r, 60));
 
-        // 2. Ustawienie typu papieru: 0x02 (Transparent/Continuous) lub 0x01 (Gap)
-        // Wymuszamy 0x01 z jawnym kodem 1 etykiety
-        await wyslij(zbudujPakiet(0x23, [0x01]));
+        // 2. Gęstość grzałki (0x21: poziom 3)
+        await wyslij(zbudujPakiet(0x21, [0x03]));
         await new Promise(r => setTimeout(r, 40));
 
-        // 3. Gęstość druku (0x21: poziom 3)
-        await wyslij(zbudujPakiet(0x21, [0x03]));
+        // 3. Typ papieru (0x23: 0x01 = etykieta ze szczeliną)
+        await wyslij(zbudujPakiet(0x23, [0x01]));
         await new Promise(r => setTimeout(r, 40));
 
         // 4. Start zadania druku (1 kopia)
@@ -279,7 +279,7 @@
         await wyslij(zbudujPakiet(0x03, [0x01]));
         await new Promise(r => setTimeout(r, 60));
 
-        // 6. SetPageSize (0x13): Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
+        // 6. Wymiary etykiety: Szerokość 384 (0x0180), Wysokość 240 (0x00F0)
         logMsg("Wymiary 384x240...");
         await wyslij(zbudujPakiet(0x13, [0x01, 0x80, 0x00, 0xF0]));
         await new Promise(r => setTimeout(r, 60));
@@ -288,7 +288,7 @@
         await wyslij(zbudujPakiet(0x15, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 50));
 
-        // 8. RASTER: wysyłanie linii rastra
+        // 8. RASTER: wysyłanie linii
         logMsg("Wysyłanie linii...");
         const widthBytes = 48; // 384 / 8
         let totalBlack = 0;
@@ -337,12 +337,12 @@
         await wyslij(zbudujPakiet(0xF3, [0x01]));
         await new Promise(r => setTimeout(r, 150));
 
-        // 11. Wyzwolenie fizycznego druku bufora (Print Page Buffer Execution)
-        // W firmware B3S/B21: komenda 0xF5 z parametrem 0x01 uruchamia właściwy wydruk sprzętowy
-        logMsg("Wymuszenie wydruku (0xF5)...");
-        await wyslij(zbudujPakiet(0xF5, [0x01]));
-        await new Promise(r => setTimeout(r, 150));
+        // 11. Potwierdzenie gotowości i wyzwolenie silnika (D3 ACK + Form Feed)
+        logMsg("Zwolnienie bufora i start silnika...");
+        await wyslij(zbudujPakiet(0xD3, [0x01]));
+        await new Promise(r => setTimeout(r, 80));
 
+        await wyslij(zbudujPakiet(0x0E, [0x01])); // Form Feed
         logMsg("Zlecenie zakończone.");
 
       } catch (err) {
