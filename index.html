@@ -257,87 +257,79 @@
       const ctx = canvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
-      logMsg("--- START WYPAŁU ---");
+      logMsg("--- TEST GRZAŁKI & WYPAŁU ---");
       try {
         // 1. Handshake connect
         await sendPacket(0xC1, [0x01], 60);
 
-        // 2. Maksymalna gęstość grzałki (poziom 5) i typ papieru
+        // 2. Maksymalna gęstość grzania (0x21: 0x05)
         await sendPacket(0x21, [0x05], 40);
+        // 3. Typ papieru (0x23: 0x01 = etykieta ze szczeliną)
         await sendPacket(0x23, [0x01], 40);
 
-        // 3. Start zadania drukowania: 7 bajtów dla B3S/B1 (włącza szynę zasilania grzałki)
-        // [totalPages_H, totalPages_L, 0, 0, 0, 0, pageColor=0]
-        logMsg("Start zadania (7B)...");
-        await sendPacket(0x01, [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00], 60);
+        // 4. Start zadania (1 strona)
+        logMsg("Start job...");
+        await sendPacket(0x01, [0x00, 0x01], 60);
 
-        // 4. Początek strony
+        // 5. Start strony
         await sendPacket(0x03, [0x01], 60);
 
-        // 5. Geometria: Wysokość (240), Szerokość (384)
+        // 6. Rozmiar: 384 px szerokości na 240 linii
         await sendPacket(0x13, [0x00, 0xF0, 0x01, 0x80], 60);
-
-        // 6. Ilość kopii
         await sendPacket(0x15, [0x00, 0x01], 40);
 
-        // 7. Zapytanie o status przed rastrem
-        await sendPacket(0xA3, [0x01], 40);
-
-        // 8. Przesyłanie wierszy rastra
-        logMsg("Wypalanie pikseli...");
-        const bytesPerLine = 48; // 384 / 8
+        // 7. Przesyłanie wierszy z wymuszeniem paska testowego
+        logMsg("Wysyłanie linii...");
+        const bytesPerLine = 48; // 384 px / 8
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(bytesPerLine);
-          let hasBlack = false;
 
-          for (let x = 0; x < 384; x++) {
-            let idx = (y * 384 + x) * 4;
-            let r = imgData[idx];
-            let g = imgData[idx + 1];
-            let b = imgData[idx + 2];
-            let a = imgData[idx + 3];
+          // Wymuszony czarny pasek na pierwszych 15 liniach (test sprzętowy grzałki)
+          if (y < 15) {
+            lineBytes.fill(0xFF);
+          } else {
+            for (let x = 0; x < 384; x++) {
+              let idx = (y * 384 + x) * 4;
+              let r = imgData[idx];
+              let g = imgData[idx + 1];
+              let b = imgData[idx + 2];
+              let a = imgData[idx + 3];
 
-            if (a > 128 && ((r + g + b) / 3 < 128)) {
-              lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
-              hasBlack = true;
+              // Czarny punkt
+              if (a > 128 && ((r + g + b) / 3 < 128)) {
+                lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
+              }
             }
           }
 
-          if (!hasBlack) {
-            await sendPacket(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01], 2);
-          } else {
-            // Bezpośredni raster: nr_H, nr_L, powtórzenia=1, bajty danych
-            let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
-            await sendPacket(0x85, payload, 3);
-          }
+          // Pakiet linii: [nr_H, nr_L, powtórzenia=1, ...dane]
+          let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
+          await sendPacket(0x85, payload, 3);
 
-          if (y % 40 === 0) {
-            logMsg("Wiersz " + y + "/240");
+          if (y % 50 === 0) {
             await new Promise(r => setTimeout(r, 6));
           }
         }
 
-        // 9. Zakończenie strony (0xE3)
-        logMsg("Zamykanie bufora...");
+        // 8. Koniec strony (0xE3)
+        logMsg("Zamykanie strony...");
         await sendPacket(0xE3, [0x01], 80);
 
-        // 10. Potwierdzenie gotowości (0x06)
-        logMsg("Zatwierdzenie strony...");
+        // 9. Potwierdzenie gotowości (0x06)
         await sendPacket(0x06, [0x01], 80);
 
-        // 11. Koniec zadania (0xF3)
-        logMsg("Koniec zadania...");
+        // 10. Koniec zadania (0xF3)
         await sendPacket(0xF3, [0x01], 100);
 
-        // 12. Fizyczny start silnika i wypalenia (0xF5)
-        logMsg("Start silnika...");
+        // 11. Wyzwolenie wydruku (0xF5)
+        logMsg("Start grzałki i silnika...");
         await sendPacket(0xF5, [0x01], 150);
 
-        // 13. Wysuw do krawędzi odrywania (0x0E)
+        // 12. Wysuw do krawędzi (0x0E)
         await sendPacket(0x0E, [0x01], 50);
 
-        logMsg("Wydruk zrealizowany!");
+        logMsg("Gotowe.");
       } catch (err) {
         logMsg("Błąd: " + err.message);
       } finally {
