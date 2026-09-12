@@ -213,15 +213,15 @@
       try {
         const lib = window.niimbluelib;
 
-        // 1. Kodowanie canvasu do formatu czarno-białego (1-bit)
-        logMsg("Kodowanie grafiki...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas);
+        // 1. Kodowanie z wyraźnym kolorem 'black' (nigdy 'left'!)
+        logMsg("Kodowanie grafiki (black)...");
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "black");
 
-        // 2. Pobranie dedykowanego typu zadania dla B3S
+        // 2. Pobranie dedykowanego typu zadania
         const taskType = printerClient.getPrintTaskType() ?? "B1";
         logMsg("Tworzenie zadania: " + taskType);
 
-        // 3. Utworzenie zadania z rolką ciągłą
+        // 3. Utworzenie zadania druku
         const printTask = printerClient.abstraction.newPrintTask(taskType, {
           totalPages: 1,
           statusPollIntervalMs: 100,
@@ -231,15 +231,14 @@
         logMsg("Inicjalizacja głowicy...");
         await printTask.printInit();
 
-        // 4. Wysłanie zakodowanej strony (w zadaniach B1/B-series podaje się sam encoded)
         logMsg("Wypalanie etykiety...");
-        await printTask.printPage(encoded);
+        await printTask.printPage(encoded, 1);
 
         logMsg("Czekam na zakończenie...");
         await printTask.waitForFinished();
 
         await printerClient.abstraction.printEnd();
-        logMsg("Wydruk zrealizowany!");
+        logMsg("Sukces! Wydruk zrealizowany.");
       } catch (err) {
         logMsg("Błąd druku: " + err.message);
       } finally {
