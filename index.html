@@ -210,23 +210,40 @@
 
       const canvas = document.getElementById('previewCanvas');
 
-      logMsg("--- START DRUKU PRZEZ NIIMBLUE ---");
+      logMsg("--- START DRUKU NIIMBLUE ---");
       try {
-        // Parametry zadania druku z oficjalnej biblioteki
-        // labelType: 3 (Continuous / rolka ciągła)
-        const task = printerClient.createPrintTask({
+        const lib = window.niimbluelib;
+        let task = null;
+
+        // Auto-detekcja poprawnej fabryki PrintTask w zainstalowanej wersji biblioteki
+        const taskOptions = {
           totalPages: 1,
           density: 3,
-          labelType: 3
-        });
+          labelType: 3 // Continuous / rolka ciągła
+        };
 
-        logMsg("Inicjalizacja głowicy...");
+        if (typeof printerClient.createPrintTask === 'function') {
+          task = printerClient.createPrintTask(taskOptions);
+        } else if (lib.PrintTaskFactory && typeof lib.PrintTaskFactory.create === 'function') {
+          task = lib.PrintTaskFactory.create(printerClient, taskOptions);
+        } else if (typeof lib.PrintTask === 'function') {
+          task = new lib.PrintTask(printerClient, taskOptions);
+        } else if (typeof lib.createPrintTask === 'function') {
+          task = lib.createPrintTask(printerClient, taskOptions);
+        } else {
+          // Inspekcja dostępnych obiektów w razie innej struktury bundla
+          const keys = Object.keys(lib).filter(k => k.toLowerCase().includes("print"));
+          logMsg("Dostępne moduły: " + keys.join(", "));
+          throw new Error("Nie znaleziono konstruktora PrintTask (sprawdź moduły wyżej)");
+        }
+
+        logMsg("Inicjalizacja zadania druku...");
         await task.printInit();
 
-        logMsg("Przesyłanie etykiety...");
+        logMsg("Wypalanie etykiety do grzałki...");
         await task.printPage(canvas, 1);
 
-        logMsg("Czekam na zakończenie...");
+        logMsg("Oczekiwanie na zakończenie...");
         await task.waitForFinished();
 
         logMsg("Wydruk zrealizowany!");
