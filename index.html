@@ -257,38 +257,35 @@
       const ctx = canvas.getContext('2d');
       const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
-      logMsg("--- START DRUKU NIIMBLUE ---");
+      logMsg("--- START WYPAŁU ---");
       try {
         // 1. Handshake connect
-        logMsg("Połączenie sesji (0xC1)...");
         await sendPacket(0xC1, [0x01], 60);
 
-        // 2. Inicjalizacja parametrów
-        await sendPacket(0x21, [0x03], 40); // Gęstość
-        await sendPacket(0x23, [0x01], 40); // Typ papieru (szczelina)
+        // 2. Maksymalna gęstość grzałki (poziom 5) i typ papieru
+        await sendPacket(0x21, [0x05], 40);
+        await sendPacket(0x23, [0x01], 40);
 
-        // 3. Start zadania drukowania (1 strona)
+        // 3. Start zadania drukowania (1 kopia)
         logMsg("Start job...");
         await sendPacket(0x01, [0x00, 0x01], 60);
 
         // 4. Początek strony
-        logMsg("Start page...");
         await sendPacket(0x03, [0x01], 60);
 
-        // 5. Geometria Niimblue: Wysokość (240 = 0x00F0), Szerokość (384 = 0x0180)
-        logMsg("Konfiguracja rozmiaru...");
+        // 5. Geometria: Wysokość (240), Szerokość (384)
         await sendPacket(0x13, [0x00, 0xF0, 0x01, 0x80], 60);
 
         // 6. Ilość kopii
         await sendPacket(0x15, [0x00, 0x01], 40);
 
-        // 7. Przesyłanie wierszy rastra
+        // 7. Przesyłanie wierszy z pełnym nagłówkiem grzania
         logMsg("Transmisja rastra...");
-        const bytesPerLine = 48;
+        const bytesPerLine = 48; // 384 px / 8
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(bytesPerLine);
-          let hasBlack = false;
+          let blackCount = 0;
 
           for (let x = 0; x < 384; x++) {
             let idx = (y * 384 + x) * 4;
@@ -299,14 +296,15 @@
 
             if (a > 128 && ((r + g + b) / 3 < 128)) {
               lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
-              hasBlack = true;
+              blackCount++;
             }
           }
 
-          if (!hasBlack) {
+          if (blackCount === 0) {
             await sendPacket(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01], 2);
           } else {
-            let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
+            // Nagłówek dla B3S: [nr_H, nr_L, 0x00, 0x00, 0x00, 0x01, ...bajty]
+            let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x00, 0x00, 0x00, 0x01, ...lineBytes];
             await sendPacket(0x85, payload, 3);
           }
 
@@ -317,22 +315,22 @@
         }
 
         // 8. Zakończenie strony (0xE3)
-        logMsg("Zamykanie bufora (0xE3)...");
+        logMsg("Zamykanie bufora...");
         await sendPacket(0xE3, [0x01], 80);
 
-        // 9. Potwierdzenie gotowości strony do druku (0x06)
-        logMsg("Zatwierdzenie strony (0x06)...");
+        // 9. Potwierdzenie gotowości (0x06)
+        logMsg("Zatwierdzenie strony...");
         await sendPacket(0x06, [0x01], 80);
 
-        // 10. Zakończenie zadania drukowania (0xF3)
-        logMsg("Koniec zadania (0xF3)...");
+        // 10. Koniec zadania (0xF3)
+        logMsg("Koniec zadania...");
         await sendPacket(0xF3, [0x01], 100);
 
-        // 11. Fizyczny start silnika i wypalenia (0xF5)
-        logMsg("Start silnika (0xF5)...");
+        // 11. Fizyczny start silnika i grzałki (0xF5)
+        logMsg("Start silnika...");
         await sendPacket(0xF5, [0x01], 150);
 
-        // 12. Wysuw do krawędzi odrywania (0x0E)
+        // 12. Wysuw do odrywania (0x0E)
         await sendPacket(0x0E, [0x01], 50);
 
         logMsg("Wydruk zrealizowany!");
