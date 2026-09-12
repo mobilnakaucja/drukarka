@@ -25,7 +25,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S_P (FW 3.15)</h2>
+    <h2>Drukarka Niimbot B3S_P (NiimBlue Core)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z Niimbot B3S</button>
   </div>
@@ -39,8 +39,7 @@
       <div><strong>Worek:</strong> <span id="lblNote">-</span></div>
     </div>
     
-    <!-- Canvas dostosowany do pełnej głowicy B3S_P: 586 x 240 px -->
-    <canvas id="previewCanvas" width="586" height="240"></canvas>
+    <canvas id="previewCanvas" width="384" height="240"></canvas>
     
     <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
     
@@ -57,10 +56,6 @@
     let currentDate = "";
     let currentNote = "";
 
-    const HEAD_WIDTH = 586; // Z etykiety testowej PV: 586
-    const HEAD_HEIGHT = 240;
-    const BYTES_PER_ROW = Math.ceil(HEAD_WIDTH / 8); // 74 bajty
-
     function logMsg(msg) {
       const box = document.getElementById('debugBox');
       box.innerText += "\n" + msg;
@@ -72,34 +67,42 @@
       const ctx = canvas.getContext('2d');
 
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, HEAD_WIDTH, HEAD_HEIGHT);
+      ctx.fillRect(0, 0, 384, 240);
 
       ctx.fillStyle = "#000000";
-      ctx.font = "bold 26px sans-serif";
-      ctx.fillText("BUTELKOBUS", 240, 50);
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText("BUTELKOBUS", 195, 45);
 
-      ctx.font = "16px sans-serif";
-      ctx.fillText("Data odbioru:", 240, 85);
-      ctx.font = "bold 18px sans-serif";
-      ctx.fillText(dataParagonu || "-", 240, 110);
+      ctx.font = "12px sans-serif";
+      ctx.fillText("Data odbioru:", 195, 75);
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(dataParagonu || "-", 195, 95);
 
       if (nrWorka && nrWorka !== "Brak") {
-        ctx.font = "16px sans-serif";
-        ctx.fillText("Worek:", 240, 145);
-        ctx.font = "bold 22px sans-serif";
-        ctx.fillText(nrWorka, 240, 175);
+        ctx.font = "12px sans-serif";
+        ctx.fillText("Worek:", 195, 125);
+        ctx.font = "bold 16px sans-serif";
+        ctx.fillText(nrWorka, 195, 145);
       }
 
-      ctx.font = "16px sans-serif";
-      ctx.fillText("ID Paragonu:", 240, 205);
-      ctx.font = "bold 18px monospace";
-      ctx.fillText(idParagonu || "-", 240, 228);
+      ctx.font = "12px sans-serif";
+      ctx.fillText("ID Paragonu:", 195, 175);
+      ctx.font = "bold 16px monospace";
+
+      let parts = (idParagonu || "").split('/');
+      if (parts.length > 1) {
+        ctx.fillText(parts[0], 195, 195);
+        ctx.font = "bold 20px monospace";
+        ctx.fillText(parts[1], 195, 220);
+      } else {
+        ctx.fillText(idParagonu || "-", 195, 205);
+      }
 
       if (idParagonu && idParagonu !== "Brak" && window.QRCode) {
         const tempCanvas = document.createElement('canvas');
-        QRCode.toCanvas(tempCanvas, idParagonu, { width: 210, margin: 1 }, function (err) {
+        QRCode.toCanvas(tempCanvas, idParagonu, { width: 175, margin: 1 }, function (err) {
           if (!err) {
-            ctx.drawImage(tempCanvas, 15, 15);
+            ctx.drawImage(tempCanvas, 10, 30);
           }
         });
       }
@@ -151,6 +154,7 @@
       document.body.appendChild(script);
     }
 
+    // --- ENKAPSULACJA PAKIETÓW ZGODNA Z NIIMBLUE ---
     function encodePacket(type, payload = []) {
       const len = payload.length;
       const raw = [0x55, 0x55, type, len, ...payload];
@@ -160,7 +164,7 @@
       return new Uint8Array(raw);
     }
 
-    async function sendPacket(type, payload = [], delay = 30) {
+    async function sendPacket(type, payload = [], delay = 25) {
       if (!writeCharacteristic) return;
       const packet = encodePacket(type, payload);
       const CHUNK = 20;
@@ -199,7 +203,7 @@
         });
 
         const server = await bluetoothDevice.gatt.connect();
-        logMsg("Połączono GATT...");
+        logMsg("Połączono GATT. Wykrywanie usług...");
 
         let service;
         try {
@@ -220,15 +224,15 @@
         if (notifyCharacteristic) {
           await notifyCharacteristic.startNotifications();
           notifyCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-          logMsg("Maszyna stanów aktywna.");
+          logMsg("Maszyna stanów NiimBlue aktywna.");
         }
 
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (bluetoothDevice.name || "Połączono");
         badge.className = "status-badge status-on";
-        logMsg("Drukarka gotowa.");
+        logMsg("Gotowy do druku!");
       } catch (err) {
-        logMsg("Błąd: " + err.message);
+        logMsg("Błąd połączenia: " + err.message);
       }
     }
 
@@ -247,39 +251,43 @@
 
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, HEAD_WIDTH, HEAD_HEIGHT).data;
+      const imgData = ctx.getImageData(0, 0, 384, 240).data;
 
-      logMsg("--- START DRUKU B3S (586 px) ---");
+      logMsg("--- START DRUKU (Protokół NiimBlue) ---");
       try {
-        // 1. Handshake sesji
+        // 1. Handshake connect (0xC1)
         await sendPacket(0xC1, [0x01], 60);
 
-        // 2. Maksymalna gęstość i typ papieru
-        await sendPacket(0x21, [0x05], 40);
+        // 2. Zapytanie o status głowicy (0xA3)
+        await sendPacket(0xA3, [0x01], 40);
+
+        // 3. Konfiguracja grzałki: Gęstość (0x21: poziom 3) i Typ etykiety (0x23: 0x01 Gap)
+        await sendPacket(0x21, [0x03], 40);
         await sendPacket(0x23, [0x01], 40);
 
-        // 3. Start zadania (7B dla FW 3.15)
-        logMsg("Start zadania...");
-        await sendPacket(0x01, [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00], 60);
+        // 4. Start zadania (0x01: 1 strona)
+        logMsg("Start job...");
+        await sendPacket(0x01, [0x00, 0x01], 60);
 
-        // 4. Początek strony
+        // 5. Start strony (0x03)
         await sendPacket(0x03, [0x01], 60);
 
-        // 5. Geometria pod B3S_P (PV: 586 -> 0x024A, H: 240 -> 0x00F0)
-        logMsg("Ustawienie 586x240...");
-        await sendPacket(0x13, [0x00, 0xF0, 0x02, 0x4A], 60);
+        // 6. Rozmiar strony (0x13): Wysokość 240 (0x00F0), Szerokość 384 (0x0180)
+        logMsg("Wymiary 240x384...");
+        await sendPacket(0x13, [0x00, 0xF0, 0x01, 0x80], 60);
         await sendPacket(0x15, [0x00, 0x01], 40);
 
-        // 6. Przesyłanie wierszy (74 bajty na wiersz)
-        logMsg("Wysyłanie rastra...");
-        let totalBlack = 0;
+        // 7. Raster NiimBlue: linie 384 px (48 bajtów)
+        logMsg("Przesyłanie wierszy rastra...");
+        const widthBytes = 48;
+        let blackTotal = 0;
 
-        for (let y = 0; y < HEAD_HEIGHT; y++) {
-          let lineBytes = new Uint8Array(BYTES_PER_ROW);
-          let hasBlack = false;
+        for (let y = 0; y < 240; y++) {
+          let lineBytes = new Uint8Array(widthBytes);
+          let rowBlack = 0;
 
-          for (let x = 0; x < HEAD_WIDTH; x++) {
-            let idx = (y * HEAD_WIDTH + x) * 4;
+          for (let x = 0; x < 384; x++) {
+            let idx = (y * 384 + x) * 4;
             let r = imgData[idx];
             let g = imgData[idx + 1];
             let b = imgData[idx + 2];
@@ -287,14 +295,17 @@
 
             if (a > 128 && ((r + g + b) / 3 < 128)) {
               lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
-              totalBlack++;
-              hasBlack = true;
+              rowBlack++;
             }
           }
 
-          if (!hasBlack) {
+          blackTotal += rowBlack;
+
+          if (rowBlack === 0) {
+            // Pusta linia (0x84): numer wiersza Big-Endian, 1 powtórzenie
             await sendPacket(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01], 2);
           } else {
+            // Linia z danymi (0x85): numer wiersza Big-Endian, 1 powtórzenie, bajty pikseli
             let payload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
             await sendPacket(0x85, payload, 3);
           }
@@ -305,15 +316,24 @@
           }
         }
 
-        logMsg("Czarne piksele: " + totalBlack);
+        logMsg("Zbuforowano pikseli: " + blackTotal);
 
-        // 7. Zakończenie i wyzwolenie druku
+        // 8. Zakończenie strony (0xE3)
+        logMsg("Koniec strony...");
         await sendPacket(0xE3, [0x01], 80);
+
+        // 9. Potwierdzenie gotowości (0x06)
         await sendPacket(0x06, [0x01], 80);
+
+        // 10. Koniec zadania (0xF3)
+        logMsg("Koniec zadania...");
         await sendPacket(0xF3, [0x01], 100);
 
-        logMsg("Wyzwolenie sprzętowe...");
+        // 11. Start silnika i zasilania grzałki (0xF5)
+        logMsg("Wyzwalanie wydruku (0xF5)...");
         await sendPacket(0xF5, [0x01], 150);
+
+        // 12. Wysuw do odrywania (0x0E)
         await sendPacket(0x0E, [0x01], 50);
 
         logMsg("Wydruk zrealizowany!");
