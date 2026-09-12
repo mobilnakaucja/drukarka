@@ -258,35 +258,36 @@
       try {
         // 1. Status zapytania
         await wyslij(zbudujPakiet(0xA3, [0x01]));
-        await new Promise(r => setTimeout(r, 60));
+        await new Promise(r => setTimeout(r, 50));
 
         // 2. Start zadania (1 kopia)
         logMsg("Start zadania...");
         await wyslij(zbudujPakiet(0x01, [0x00, 0x01]));
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 60));
 
         // 3. Start strony
         logMsg("Start strony...");
         await wyslij(zbudujPakiet(0x03, [0x01]));
-        await new Promise(r => setTimeout(r, 80));
-
-        // 4. SetPageSize (0x13): Deklaracja geometrii [Wysokość 240 (0x00F0), Szerokość 384 (0x0180)]
-        logMsg("Ustawianie wymiarów (0x13)...");
-        await wyslij(zbudujPakiet(0x13, [0x00, 0xF0, 0x01, 0x80]));
-        await new Promise(r => setTimeout(r, 80));
-
-        // 5. Ilość sztuk (0x15: 1)
-        await wyslij(zbudujPakiet(0x15, [0x00, 0x01]));
         await new Promise(r => setTimeout(r, 60));
+
+        // 4. Prawidłowa deklaracja wymiarów dla B3S:
+        // Szerokość: 384 px (0x01, 0x80) | Wysokość: 240 px (0x00, 0xF0)
+        logMsg("Wymiary 384x240 (0x13)...");
+        await wyslij(zbudujPakiet(0x13, [0x01, 0x80, 0x00, 0xF0]));
+        await new Promise(r => setTimeout(r, 60));
+
+        // 5. Ilość sztuk
+        await wyslij(zbudujPakiet(0x15, [0x00, 0x01]));
+        await new Promise(r => setTimeout(r, 50));
 
         // 6. Wysyłanie 240 linii grafiki
         logMsg("Wysyłanie linii...");
-        const widthBytes = 48; // 384 px / 8
+        const widthBytes = 48; // 384 / 8
         let totalBlack = 0;
 
         for (let y = 0; y < 240; y++) {
           let lineBytes = new Uint8Array(widthBytes);
-          let rowBlackCount = 0;
+          let hasBlack = false;
 
           for (let x = 0; x < 384; x++) {
             let idx = (y * 384 + x) * 4;
@@ -297,24 +298,23 @@
 
             if (a > 128 && ((r + g + b) / 3 < 128)) {
               lineBytes[Math.floor(x / 8)] |= (0x80 >> (x % 8));
-              rowBlackCount++;
+              totalBlack++;
+              hasBlack = true;
             }
           }
 
-          totalBlack += rowBlackCount;
-
-          if (rowBlackCount === 0) {
-            // Pusta linia (0x84): [Nr_H, Nr_L, Powtórzenia=1]
+          if (!hasBlack) {
+            // Pusta linia (0x84): numer linii H, L, 1 powtórzenie
             await wyslij(zbudujPakiet(0x84, [(y >> 8) & 0xFF, y & 0xFF, 0x01]));
           } else {
-            // Standardowa linia Niimbot (0x85): [Nr_H, Nr_L, 0x00, 0x00, 0x00, 0x01, ...dane]
-            let linePayload = [(y >> 8) & 0xFF, y & 0xFF, 0x00, 0x00, 0x00, 0x01, ...lineBytes];
+            // Linia z danymi (0x85): numer linii H, L, 1 powtórzenie, bajty pikseli
+            let linePayload = [(y >> 8) & 0xFF, y & 0xFF, 0x01, ...lineBytes];
             await wyslij(zbudujPakiet(0x85, linePayload));
           }
 
           if (y % 40 === 0) {
             logMsg("Linia: " + y + "/240");
-            await new Promise(r => setTimeout(r, 8));
+            await new Promise(r => setTimeout(r, 6));
           } else {
             await new Promise(r => setTimeout(r, 2));
           }
@@ -322,14 +322,19 @@
 
         logMsg("Suma pikseli: " + totalBlack);
 
-        // 7. Koniec strony
-        logMsg("Zamykanie strony (0xE3)...");
+        // 7. Koniec strony (0xE3)
+        logMsg("Zamykanie strony...");
         await wyslij(zbudujPakiet(0xE3, [0x01]));
         await new Promise(r => setTimeout(r, 100));
 
-        // 8. Koniec zadania i wysuw
-        logMsg("Kończenie wydruku (0xF3)...");
+        // 8. Koniec zadania (0xF3)
+        logMsg("Koniec zadania...");
         await wyslij(zbudujPakiet(0xF3, [0x01]));
+        await new Promise(r => setTimeout(r, 100));
+
+        // 9. Fizyczny wysuw etykiety (Form Feed 0x0E)
+        logMsg("Wysuwanie etykiety (0x0E)...");
+        await wyslij(zbudujPakiet(0x0E, [0x01]));
 
       } catch (err) {
         logMsg("Błąd druku: " + err.message);
