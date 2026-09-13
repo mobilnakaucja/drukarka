@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drukarka ButelkoBus</title>
   
-  <!-- Oficjalny silnik NiimBlue UMD -->
   <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/dist/umd/niimbluelib.min.js"></script>
-  <!-- Generator QR -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   
   <style>
@@ -30,7 +28,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (NiimBlue)</h2>
+    <h2>Drukarka Niimbot B3S (Ostateczna)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
   </div>
@@ -73,7 +71,7 @@
       if (window.niimbluelib) {
         box.innerText = "Silnik NiimBlue gotowy! Kliknij 'Połącz z drukarką'.";
       } else {
-        box.innerText = "Błąd: Odśwież stronę (brak połączenia z biblioteką).";
+        box.innerText = "Błąd: Odśwież stronę (brak biblioteki).";
       }
     };
 
@@ -172,7 +170,7 @@
     async function polaczZNiimbot() {
       try {
         if (!window.niimbluelib) {
-          alert("Poczekaj chwilę na bibliotekę lub odśwież stronę.");
+          alert("Poczekaj chwilę na bibliotekę.");
           return;
         }
 
@@ -194,7 +192,7 @@
       }
     }
 
-  async function drukujEtykiete() {
+    async function drukujEtykiete() {
       if (!printerClient || !printerClient.isConnected()) {
         alert("Najpierw kliknij: Połącz z drukarką!");
         return;
@@ -209,48 +207,28 @@
 
       const canvas = document.getElementById('previewCanvas');
 
-      logMsg("--- START DRUKU NIIMBLUE ---");
+      logMsg("--- START DRUKU (FINAL) ---");
       try {
         const lib = window.niimbluelib;
 
-        logMsg("Kodowanie grafiki (top)...");
-        // Używamy "top" – sterownik B-Series odrzuca często "left" ze względu na pionowy wysuw
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "top");
+        // TUTAJ BYŁ BŁĄD BIBLIOTEKI - PRZEKAZUJEMY "black" zamiast kierunku!
+        logMsg("Kodowanie grafiki jako 'black'...");
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "black");
 
-        // --- GŁĘBOKA NAPRAWA OBIEKTU (Obejście błędu w niimbluelib) ---
-        // Rekurencyjnie przeszukujemy zdekodowany obiekt. Jeśli przez błąd biblioteki
-        // pole 'color' dostało wartość 'left' lub 'top', siłowo zamieniamy je na 'black'.
-        const fixLibraryBug = (obj) => {
-          if (!obj || typeof obj !== 'object') return;
-          if (obj.color === "left" || obj.color === "top") {
-            obj.color = "black";
-          }
-          for (let key of Object.keys(obj)) {
-            if (typeof obj[key] === 'object') {
-              fixLibraryBug(obj[key]);
-            }
-          }
-        };
-        fixLibraryBug(encoded); // Aplikujemy łatkę
-        // -------------------------------------------------------------
-
-        // Pobieramy rozpoznany typ zadania (np. B1)
         const printTaskName = printerClient.getPrintTaskType() ?? "B1";
-        logMsg("Zadanie: " + printTaskName);
+        logMsg("Silnik zadania: " + printTaskName);
 
-        // Ustawiamy parametry, najważniejsze: labelType: 3 (Rolka ciągła)
         const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 
+          labelType: 3 // 3 = Rolka ciągła bez przerw
         });
 
         logMsg("Inicjalizacja głowicy...");
         await printTask.printInit();
 
-        // Wypalamy etykietę - obiekt jest już "czysty" i nie wywali błędu koloru
-        logMsg("Wypalanie etykiety...");
+        logMsg("Wysyłanie danych do grzałki...");
         await printTask.printPage(encoded, 1);
 
         logMsg("Czekam na zakończenie...");
