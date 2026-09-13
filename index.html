@@ -28,7 +28,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Bulletproof)</h2>
+    <h2>Drukarka Niimbot B3S (HACKED)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
   </div>
@@ -46,7 +46,7 @@
     
     <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
     
-    <div id="debugBox">Sprawdzanie biblioteki...</div>
+    <div id="debugBox">Czekam na uruchomienie...</div>
 
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
@@ -207,62 +207,56 @@
 
       const canvas = document.getElementById('previewCanvas');
 
-      logMsg("--- START DRUKU (PANCERNY) ---");
+      logMsg("--- START DRUKU (HACKED) ---");
       try {
         const lib = window.niimbluelib;
 
         logMsg("Kodowanie grafiki...");
         const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
-        
-        // ZABEZPIECZENIE 1: Kasujemy właściwość koloru, by ominąć błędne blokady w kodzie biblioteki
-        delete encoded.color;
+        encoded.color = "black";
 
-        let printTaskName = printerClient.getPrintTaskType();
-        if (!printTaskName) printTaskName = "B1";
-        
+        const printTaskName = printerClient.getPrintTaskType() ?? "B1";
         logMsg("Silnik zadania: " + printTaskName);
 
-        let printTask = printerClient.abstraction.newPrintTask(printTaskName, {
+        const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // 3 = Rolka ciągła bez przerw
+          labelType: 3 // 3 = Rolka ciągła
         });
+
+        // 💥 OSTATECZNY HACK: SZUKAMY I USUWAMY FUNKCJĘ Z BŁĘDEM 💥
+        // Szukamy w łańcuchu prototypów biblioteki NiimBlue metody wyrzucającej 
+        // ten konkretny tekst o błędzie i podmieniamy ją na pustą funkcję.
+        let zneutralizowano = false;
+        let proto = Object.getPrototypeOf(printTask);
+        
+        while (proto) {
+          for (let key of Object.getOwnPropertyNames(proto)) {
+            try {
+              let property = proto[key];
+              if (typeof property === 'function') {
+                if (property.toString().includes('is not supported by this print task')) {
+                  proto[key] = function() { return true; }; // Rozbrajamy bombę
+                  zneutralizowano = true;
+                }
+              }
+            } catch(e) {} // Ignorujemy błędy dostępu
+          }
+          proto = Object.getPrototypeOf(proto);
+        }
+
+        if(zneutralizowano) {
+            logMsg("✅ HACK: Błąd koloru całkowicie zneutralizowany!");
+        } else {
+            logMsg("⚠️ HACK: Nie znaleziono blokady. Oby zadziałało...");
+        }
 
         logMsg("Inicjalizacja głowicy...");
         await printTask.printInit();
 
         logMsg("Wysyłanie danych do grzałki...");
-        try {
-          // Próbujemy standardowo wypalić (bez flag koloru)
-          await printTask.printPage(encoded, 1);
-        } catch (pageErr) {
-          logMsg("Odrzucono: " + pageErr.message);
-          
-          // ZABEZPIECZENIE 2: Jeśli silnik B1 nadal świruje z kolorem, używamy uniwersalnego D110
-          if (pageErr.message.includes("color")) {
-            logMsg("Próba ominięcia (Fallback na silnik uniwersalny D110)...");
-            
-            // Restartujemy sterownik
-            await printerClient.abstraction.printEnd().catch(()=>{});
-            
-            // Tworzymy zadanie D110 (działa niemal ze wszystkim i nie ma durnych walidacji)
-            printTask = printerClient.abstraction.newPrintTask("D110", {
-              totalPages: 1,
-              statusPollIntervalMs: 100,
-              statusTimeoutMs: 8000,
-              labelType: 3
-            });
-            
-            logMsg("Reinicjalizacja głowicy (D110)...");
-            await printTask.printInit();
-            
-            logMsg("Ponowne wypalanie...");
-            await printTask.printPage(encoded, 1);
-          } else {
-            throw pageErr; // Inny błąd, wyrzucamy w górę
-          }
-        }
+        await printTask.printPage(encoded, 1);
 
         logMsg("Czekam na zakończenie...");
         await printTask.waitForFinished();
