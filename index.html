@@ -212,45 +212,42 @@
       logMsg("--- START DRUKU NIIMBLUE ---");
       try {
         const lib = window.niimbluelib;
+        const quantity = 1;
 
-        // 1. Zabezpieczony encode - bez żadnych dziwnych flag "left" czy "black", tylko czysty Canvas
+        // 1. Zgodnie z oficjalnym API przykładu
         logMsg("Kodowanie grafiki...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas);
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
 
-        // Ustawiamy sztywno kolor w zdekodowanym obiekcie (na wszelki wypadek, dla starszego B1)
-        encoded.color = "black";
+        // 2. Pobieramy typ zadania, na jaki wskaże nam podłączony model. Brak wymuszania konkretnych nazw!
+        const printTaskName = printerClient.getPrintTaskType() ?? "B1";
+        logMsg("Zadanie: " + printTaskName);
 
-        // 2. Pobranie dedykowanego typu zadania. Jeżeli B3S się nie zidentyfikuje poprawnie, użyjemy nowszego silnika dla tej serii: B21V1
-        let taskType = printerClient.getPrintTaskType();
-        if (!taskType || taskType === "B1" || taskType === "D110") {
-          taskType = "B21V1";
-        }
-        logMsg("Tworzenie zadania: " + taskType);
-
-        // 3. Utworzenie zadania druku z parametrami ciągłej rolki
-        const printTask = printerClient.abstraction.newPrintTask(taskType, {
-          totalPages: 1, // ile kartek w buforze
+        // 3. Konfiguracja zadania. Pamiętamy o labelType: 3 (rolka ciągła)
+        const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
+          totalPages: quantity,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3, // Ważne: 3 = Continuous (zapobiega blokadzie na braku naklejki)
-          printDirection: "left" // <-- Kierunek przekazujemy w ogólnych opcjach zadania
+          labelType: 3 
         });
 
         logMsg("Inicjalizacja głowicy...");
         await printTask.printInit();
 
-        // 4. Wypalenie: większość silników domyślnie przyjmuje (obraz, kopie), więc zostawiamy standard
+        // 4. Prawidłowe użycie printPage (obraz, sztuki) DLA ZADANIA B1 / ogólnych.
+        // Jeśli biblioteka się rzuci o kolor, użyjemy metody hackującej właściwość koloru, ale BEZ ZMIENIANIA argumentów wywołania funkcji.
+        encoded.color = "black"; 
+        
         logMsg("Wypalanie etykiety...");
-        await printTask.printPage(encoded, 1);
+        await printTask.printPage(encoded, quantity);
 
         logMsg("Czekam na zakończenie...");
         await printTask.waitForFinished();
 
-        await printerClient.abstraction.printEnd();
         logMsg("Sukces! Wydruk zrealizowany.");
       } catch (err) {
         logMsg("Błąd druku: " + err.message);
       } finally {
+        if(printerClient) await printerClient.abstraction.printEnd().catch(()=>{});
         btn.disabled = false;
       }
     }
