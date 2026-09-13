@@ -28,7 +28,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (DeepFix)</h2>
+    <h2>Drukarka Niimbot B3S (Ninja)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     <button class="btn-bt" onclick="polaczZNiimbot()">🔗 Połącz z drukarką</button>
   </div>
@@ -207,73 +207,70 @@
 
       const canvas = document.getElementById('previewCanvas');
 
-      logMsg("--- START DRUKU (DEEP FIX) ---");
+      logMsg("--- START DRUKU (NINJA HACK) ---");
       try {
         const lib = window.niimbluelib;
 
-        logMsg("Generowanie klatek...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
+        logMsg("Kodowanie grafiki...");
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas); // Brak parametrów koloru
 
-        // GŁĘBOKA NAPRAWA OBIEKTU Z BIBLIOTEKI
-        function deepFixBug(obj) {
-          if (!obj) return;
-          // Zabezpieczenie przed zawieszeniem na tablicy pikseli
-          if (obj instanceof Uint8Array || obj instanceof ArrayBuffer) return; 
+        // 🥷 NINJA HACK: Zabijamy getter koloru na amen
+        function zabijKolor(obj) {
+          if (!obj || typeof obj !== 'object') return;
+          if (obj instanceof Uint8Array || obj instanceof ArrayBuffer) return;
           
+          try {
+            // Zamieniamy odczyt właściwości na puste 'undefined', by ominąć walidator
+            Object.defineProperty(obj, 'color', {
+              get: () => undefined,
+              configurable: true,
+              enumerable: true
+            });
+          } catch(e) {}
+
           if (Array.isArray(obj)) {
-            obj.forEach(o => deepFixBug(o));
-          } else if (typeof obj === 'object') {
+            obj.forEach(zabijKolor);
+          } else {
             for (let key in obj) {
-              // Zamieniamy błędną nazwę "left" i "top" na jedyny słuszny atrament - "black"
-              if (obj[key] === 'left' || obj[key] === 'top') {
-                obj[key] = 'black';
-              } else if (typeof obj[key] === 'object') {
-                deepFixBug(obj[key]);
+              if (obj[key] && typeof obj[key] === 'object') {
+                zabijKolor(obj[key]);
               }
             }
           }
         }
-        deepFixBug(encoded);
-        logMsg("Naprawiono wewnętrzny błąd kolorów.");
+        zabijKolor(encoded);
+        logMsg("Odcięto walidację kolorów.");
 
-        // Pobieramy pierwszy silnik, a potem zapasowe w razie oporu
-        let domyslny = printerClient.getPrintTaskType();
-        let tasksToTry = [domyslny, "D110", "B21V1", "V5"].filter(Boolean);
-        
-        let success = false;
-        let lastErr = null;
+        // Wymuszamy B1 (tylko ten inicjował głowicę bez błędu 'constructor')
+        const printTaskName = "B1";
+        logMsg("Silnik zadania: " + printTaskName);
 
-        for (let t of tasksToTry) {
-          try {
-            logMsg("-> Próba silnika: " + t);
-            let printTask = printerClient.abstraction.newPrintTask(t, {
-              totalPages: 1,
-              statusPollIntervalMs: 100,
-              statusTimeoutMs: 8000,
-              labelType: 3 // 3 = Rolka ciągła (papier bez czujnika odstępu)
-            });
+        const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
+          totalPages: 1,
+          statusPollIntervalMs: 100,
+          statusTimeoutMs: 8000,
+          labelType: 3 // 3 = Rolka ciągła
+        });
 
-            await printTask.printInit();
-            await printTask.printPage(encoded, 1);
-            await printTask.waitForFinished();
-
-            logMsg("Sukces! Użyto silnika: " + t);
-            success = true;
-            break; // Przerywamy pętlę, bo wydrukowało
-          } catch (e) {
-            logMsg("Błąd (" + t + "): " + e.message);
-            lastErr = e;
-            // Czyszczenie głowicy przed kolejną próbą
-            await printerClient.abstraction.printEnd().catch(()=>{});
-          }
+        // HACK nr 2: Dodajemy sztucznie puste kolory do samego silnika, żeby odpuścił sprawdzanie
+        for (let prop in printTask) {
+           if (Array.isArray(printTask[prop])) {
+              try { printTask[prop].push(undefined); } catch(e) {}
+           }
         }
 
-        if (!success) {
-          throw new Error("Wszystkie silniki zawiodły. Ostatni błąd: " + lastErr.message);
-        }
+        logMsg("Inicjalizacja głowicy...");
+        await printTask.printInit();
 
+        logMsg("Wysyłanie danych do grzałki...");
+        await printTask.printPage(encoded, 1);
+
+        logMsg("Czekam na zakończenie...");
+        await printTask.waitForFinished();
+
+        logMsg("Sukces! Wydruk zrealizowany.");
       } catch (err) {
-        logMsg("Ostateczny błąd: " + err.message);
+        logMsg("Błąd druku: " + err.message);
       } finally {
         if (printerClient && printerClient.abstraction) {
           await printerClient.abstraction.printEnd().catch(()=>{});
