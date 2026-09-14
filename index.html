@@ -1,6 +1,4 @@
-from pathlib import Path
-
-html = r'''<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
@@ -1049,9 +1047,3 @@ $("copyLog").onclick = async () => {
 </script>
 </body>
 </html>
-'''
-
-path = Path("/mnt/data/index.html")
-path.write_text(html, encoding="utf-8")
-print(f"Utworzono: {path}")
-print(f"Rozmiar: {path.stat().st_size:,} bajtów")
