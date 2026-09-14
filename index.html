@@ -1,147 +1,1057 @@
-<!DOCTYPE html>
+from pathlib import Path
+
+html = r'''<!DOCTYPE html>
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Czysty Test Niimbot B3S-P</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ButelkoBus — panel drukowania</title>
+
+  <!--
+    NiimBlueLib:
+    Dokładnie przypięta wersja. Nie używamy @latest, ponieważ autor biblioteki
+    ostrzega, że API może się zmieniać.
+  -->
+  <script src="https://unpkg.com/@mmote/niimbluelib@0.0.1-alpha.44/dist/umd/niimbluelib.min.js"></script>
+
+  <!-- QRCode.js — tylko do generowania QR w przeglądarce -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
   <style>
-    body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; text-align: center; }
-    button { padding: 15px 30px; font-size: 18px; margin: 10px; cursor: pointer; font-weight: bold; border: none; border-radius: 8px; }
-    #btnConnect { background: #2563eb; color: white; }
-    #btnPrint { background: #16a34a; color: white; }
-    #btnPrint:disabled { background: #555; cursor: not-allowed; }
-    input { padding: 12px; font-size: 18px; width: 80%; max-width: 300px; text-align: center; margin-bottom: 10px; }
-    #canvas { background: white; margin: 20px auto; display: block; border: 2px solid #555; }
-    #log { text-align: left; background: #000; color: #0f0; padding: 10px; font-family: monospace; height: 250px; overflow-y: scroll; font-size: 12px; }
+    :root {
+      --bg:#111827; --panel:#1f2937; --panel2:#111827; --line:#374151;
+      --text:#f3f4f6; --muted:#9ca3af; --ok:#22c55e; --bad:#ef4444;
+      --warn:#f59e0b; --blue:#3b82f6;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; background:var(--bg); color:var(--text);
+      font-family:Arial,Helvetica,sans-serif;
+    }
+    .wrap { max-width:1400px; margin:0 auto; padding:20px; }
+    h1 { margin:0 0 18px; font-size:28px; }
+    .grid {
+      display:grid; grid-template-columns:380px 1fr;
+      gap:18px; align-items:start;
+    }
+    .panel {
+      background:var(--panel); border:1px solid var(--line);
+      border-radius:12px; padding:16px;
+    }
+    .panel h2 { margin:0 0 12px; font-size:18px; }
+    label { display:block; margin:10px 0 5px; color:var(--muted); font-size:13px; }
+    input, select {
+      width:100%; padding:10px; border-radius:8px;
+      border:1px solid var(--line); background:#0b1220; color:var(--text);
+    }
+    button {
+      border:0; border-radius:8px; padding:11px 14px;
+      cursor:pointer; color:white; background:var(--blue);
+      font-weight:bold; margin:4px 3px 4px 0;
+    }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    button.secondary { background:#4b5563; }
+    button.good { background:#15803d; }
+    button.warn { background:#b45309; }
+    button.danger { background:#b91c1c; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; }
+    .status {
+      padding:10px 12px; border-radius:8px; background:#0b1220;
+      border:1px solid var(--line); margin-bottom:10px;
+      font-weight:bold;
+    }
+    .status.ok { border-color:var(--ok); color:#bbf7d0; }
+    .status.bad { border-color:var(--bad); color:#fecaca; }
+    .status.warn { border-color:var(--warn); color:#fde68a; }
+    .data {
+      display:grid; grid-template-columns:130px 1fr; gap:7px 12px;
+      font-family:monospace; font-size:14px;
+    }
+    .data div:nth-child(odd) { color:var(--muted); }
+    #labelPreview {
+      width:min(100%, 1000px);
+      image-rendering:auto;
+      background:white;
+      border:2px solid #000;
+      display:block;
+      margin:0 auto;
+    }
+    .previewBox { background:#fff; padding:12px; border-radius:10px; }
+    #qrScratch { display:none; }
+    #log {
+      width:100%; height:420px; resize:vertical;
+      background:#050a12; color:#d1fae5; border:1px solid #334155;
+      border-radius:8px; padding:12px; font:12px/1.45 Consolas,monospace;
+      white-space:pre; overflow:auto;
+    }
+    .small { color:var(--muted); font-size:12px; line-height:1.45; }
+    .pill {
+      display:inline-block; padding:4px 8px; border-radius:999px;
+      background:#374151; font-size:12px; margin:2px;
+    }
+    .dangerText { color:#fca5a5; }
+    .okText { color:#86efac; }
+    @media(max-width:900px) {
+      .grid { grid-template-columns:1fr; }
+    }
   </style>
 </head>
+
 <body>
+<div class="wrap">
+  <h1>🚍 ButelkoBus — panel drukowania</h1>
 
-  <h2>TEST DRUKARKI B3S_P (KNEBEL)</h2>
-  
-  <button id="btnConnect">1. POŁĄCZ</button>
-  <br>
-  
-  <input type="text" id="textInput" value="TEST B3S-P">
-  <br>
-  
-  <button id="btnPrint" disabled>2. DRUKUJ NAPIS</button>
+  <div id="globalStatus" class="status warn">
+    Uruchamianie panelu…
+  </div>
 
-  <canvas id="canvas" width="384" height="200"></canvas>
+  <div class="grid">
 
-  <div id="log">Gotowy do akcji...</div>
+    <div>
+      <div class="panel">
+        <h2>1. Google Sheets / Apps Script</h2>
 
-  <script type="module">
-    import * as niimblue from 'https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/+esm';
+        <label>URL Web App Apps Script</label>
+        <input id="apiUrl" type="text"
+          placeholder="https://script.google.com/macros/s/.../exec">
 
-    let printerClient = null;
+        <label>Tajny klucz</label>
+        <input id="apiKey" type="password" autocomplete="off">
 
-    function logger(msg) {
-      const logBox = document.getElementById('log');
-      logBox.innerText += "\n" + msg;
-      logBox.scrollTop = logBox.scrollHeight;
+        <div class="row" style="margin-top:8px">
+          <button id="saveApi">Zapisz ustawienia</button>
+          <button id="loadReceipt" class="good">Pobierz ostatni paragon</button>
+        </div>
+
+        <div id="receiptData" style="margin-top:14px">
+          <div class="small">Brak pobranych danych.</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h2>2. NIIMBOT B3S_P</h2>
+
+        <div class="row">
+          <button id="connectBtn" class="good">🔵 Połącz Bluetooth</button>
+          <button id="disconnectBtn" class="secondary" disabled>Rozłącz</button>
+        </div>
+
+        <label>Print task</label>
+        <select id="taskSelect">
+          <option value="B1">B1</option>
+          <option value="B21_V1">B21_V1</option>
+        </select>
+
+        <label>Kierunek obrazu</label>
+        <select id="direction">
+          <option value="left">left — obrót 90°</option>
+          <option value="top">top — bez obrotu</option>
+        </select>
+
+        <label>Gęstość</label>
+        <select id="density">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+
+        <label>Liczba kopii</label>
+        <input id="copies" type="number" min="1" max="20" value="1">
+
+        <div class="row" style="margin-top:8px">
+          <button id="printerInfoBtn" class="secondary" disabled>Informacje drukarki</button>
+          <button id="testPrintBtn" class="warn" disabled>🧪 Test drukarki</button>
+          <button id="printBtn" class="good" disabled>🖨️ Drukuj etykietę</button>
+        </div>
+
+        <div id="printerInfo" class="small" style="margin-top:12px">
+          Drukarka niepołączona.
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h2>3. Diagnostyka</h2>
+        <div class="small">
+          Log pokazuje również surowe pakiety BLE wysyłane i odbierane przez NiimBlueLib.
+          Jeżeli drukarka odrzuci zadanie, tutaj będzie wiadomo na którym etapie.
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="clearLog" class="secondary">Wyczyść log</button>
+          <button id="copyLog" class="secondary">Kopiuj log</button>
+        </div>
+        <textarea id="log" readonly></textarea>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Podgląd etykiety — 586 × 240 px</h2>
+        <div class="previewBox">
+          <canvas id="labelPreview" width="586" height="240"></canvas>
+        </div>
+        <div style="margin-top:10px" class="small">
+          Fizyczna rozdzielczość głowicy Twojego B3S_P: 586 punktów.
+          Jeżeli test wydrukuje się poprawnie, ten sam mechanizm zostanie użyty
+          do właściwej etykiety.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="qrScratch"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   KONFIGURACJA
+   ============================================================ */
+
+const DEFAULT_API_URL =
+  "https://script.google.com/macros/s/AKfycbxSunUNAlVM9U5XLfTeQEgefpzRa9t0GW6LO0OPdB-zkCZgFSP5em6-bOlBKMqomIGN/exec";
+
+const STORAGE_URL = "bb_url";
+const STORAGE_KEY = "bb_key";
+
+const LABEL_W = 586;
+const LABEL_H = 240;
+
+/* ============================================================
+   STAN
+   ============================================================ */
+
+let client = null;
+let currentReceipt = null;
+let labelCanvas = document.getElementById("labelPreview");
+
+const $ = id => document.getElementById(id);
+
+/* ============================================================
+   LOGOWANIE
+   ============================================================ */
+
+function nowTime() {
+  return new Date().toLocaleTimeString("pl-PL", {hour12:false});
+}
+
+function safeString(value) {
+  try {
+    if (typeof value === "string") return value;
+    return JSON.stringify(value, null, 2);
+  } catch (_) {
+    return String(value);
+  }
+}
+
+function log(message, data) {
+  const line = `[${nowTime()}] ${message}`;
+  console.log(line, data ?? "");
+
+  let extra = "";
+  if (data !== undefined) {
+    extra = " " + safeString(data);
+  }
+
+  const box = $("log");
+  box.value += line + extra + "\n";
+  box.scrollTop = box.scrollHeight;
+}
+
+function logError(prefix, error) {
+  console.error(prefix, error);
+
+  let text = "";
+  if (error instanceof Error) {
+    text = `${error.name}: ${error.message}`;
+    if (error.stack) text += "\n" + error.stack;
+  } else {
+    text = safeString(error);
+  }
+
+  log("❌ " + prefix, text);
+  setGlobalStatus("BŁĄD — zobacz log", "bad");
+}
+
+function setGlobalStatus(text, type="warn") {
+  const el = $("globalStatus");
+  el.textContent = text;
+  el.className = "status " + type;
+}
+
+/* ============================================================
+   OBSŁUGA WYJĄTKÓW GLOBALNYCH
+   ============================================================ */
+
+window.addEventListener("error", e => {
+  log("❌ window.error", {
+    message: e.message,
+    filename: e.filename,
+    line: e.lineno,
+    column: e.colno
+  });
+});
+
+window.addEventListener("unhandledrejection", e => {
+  logError("Nieobsłużony Promise rejection", e.reason);
+});
+
+/* ============================================================
+   USTAWIENIA API
+   ============================================================ */
+
+function loadSettings() {
+  $("apiUrl").value = localStorage.getItem(STORAGE_URL) || DEFAULT_API_URL;
+  $("apiKey").value = localStorage.getItem(STORAGE_KEY) || "";
+  log("Załadowano ustawienia API z localStorage.");
+}
+
+$("saveApi").onclick = () => {
+  const url = $("apiUrl").value.trim();
+  const key = $("apiKey").value;
+
+  if (!url) {
+    setGlobalStatus("Brak URL Apps Script", "bad");
+    return;
+  }
+
+  localStorage.setItem(STORAGE_URL, url);
+  localStorage.setItem(STORAGE_KEY, key);
+
+  log("Zapisano URL i klucz API.");
+  setGlobalStatus("Ustawienia API zapisane.", "ok");
+};
+
+/* ============================================================
+   JSONP DO ISTNIEJĄCEGO doGet()
+   Nie zmieniamy Apps Script.
+   ============================================================ */
+
+function fetchLatestReceipt() {
+  return new Promise((resolve, reject) => {
+    const url = $("apiUrl").value.trim();
+    const key = $("apiKey").value;
+
+    if (!url) {
+      reject(new Error("Brak URL Apps Script."));
+      return;
     }
 
-    // 1. ŁĄCZENIE
-    document.getElementById('btnConnect').onclick = async () => {
-      try {
-        logger("Inicjalizacja klienta...");
-        printerClient = new niimblue.NiimbotBluetoothClient();
-        
-        logger("Szukanie Bluetooth...");
-        await printerClient.connect();
-        
-        await printerClient.fetchPrinterInfo().catch(() => {});
-        
-        const info = printerClient.getPrinterInfo();
-        logger(`✅ POŁĄCZONO! Sprzęt: ${info?.modelName || 'B3S_P (Wymuszony)'}`);
-        
-        // ŁATKA 1: Protokół wysyłania (sprawdzona, działała w poprzednim logu)
-        if (typeof printerClient.sendAll !== "function") {
-            logger("Łatanie protokołu Bluetooth...");
-            printerClient.sendAll = async function(packets) {
-                if (!Array.isArray(packets)) packets = [packets];
-                for (let pkt of packets) {
-                    if (typeof this.sendPacket === "function") await this.sendPacket(pkt);
-                    else if (this.channel && typeof this.channel.send === "function") await this.channel.send(pkt);
-                    await new Promise(r => setTimeout(r, 10)); 
-                }
-            };
-        }
-        
-        document.getElementById('btnPrint').disabled = false;
-      } catch (err) {
-        logger("❌ Błąd połączenia: " + err.message);
-      }
+    if (!key) {
+      reject(new Error("Brak klucza Apps Script."));
+      return;
+    }
+
+    const callbackName =
+      "obsluzDaneParagonu_" +
+      Date.now() + "_" +
+      Math.floor(Math.random() * 100000);
+
+    const script = document.createElement("script");
+
+    let finished = false;
+    const timeout = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error("Timeout JSONP — Apps Script nie odpowiedział w 15 s."));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[callbackName] = data => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      resolve(data);
     };
 
-    // 2. DRUKOWANIE
-    document.getElementById('btnPrint').onclick = async () => {
-      try {
-        const text = document.getElementById('textInput').value;
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        logger("Rysowanie na canvas (czysty B&W)...");
-        ctx.fillStyle = "white"; // Tło w 100% białe, zgodnie z manualem
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "black"; // Tekst w 100% czarny
-        ctx.font = "bold 40px sans-serif";
-        ctx.fillText(text, 20, 100);
-
-        logger("Kodowanie obrazu...");
-        const encoded = niimblue.ImageEncoder.encodeCanvas(canvas);
-        
-        // ŁATKA 2: Definiujemy TWARDY kolor obrazu omijając blokady zapisu
-        try {
-            Object.defineProperty(encoded, 'color', { value: 'black', writable: true, configurable: true, enumerable: true });
-        } catch(e) {
-            encoded.color = 'black';
-        }
-
-        logger(`Tworzenie zadania dla silnika B21V1...`);
-        const TaskClass = niimblue.B21V1PrintTask;
-        
-        const printTask = new TaskClass(printerClient, {
-          totalPages: 1,
-          labelType: 3 // Rolka ciągła (dla etykiet ButelkoBusa)
-        });
-
-        // ŁATKA 3 (NUKLEARNA): Kasujemy funkcje walidujące BEZPOŚREDNIO w obiekcie
-        // Przeszukujemy obiekt i jego prototyp i podmieniamy wszystkie funkcje 
-        // sprawdzające "kolor" na takie, które mówią "Wszystko jest w porządku, drukuj".
-        let objToHack = printTask;
-        while (objToHack) {
-            for (const key of Object.getOwnPropertyNames(objToHack)) {
-                if (typeof objToHack[key] === 'function' && key.toLowerCase().includes('color')) {
-                    objToHack[key] = function() { return true; };
-                }
-            }
-            objToHack = Object.getPrototypeOf(objToHack);
-        }
-        
-        // Brutalny knebel bezpośrednio (dla pewności)
-        printTask.supportColor = function() { return true; };
-        printTask.isSupportedColor = function() { return true; };
-
-        logger("Inicjalizacja głowicy (printInit)...");
-        await printTask.printInit();
-
-        logger("Wysyłanie pikseli do grzałki...");
-        await printTask.printPage(encoded, 1);
-
-        logger("Oczekiwanie na koniec...");
-        await printTask.waitForFinished();
-        
-        logger("✅ WYDRUKOWANO!");
-      } catch (err) {
-        logger("❌ BŁĄD DRUKU: " + err.message);
-      } finally {
-        if (printerClient && typeof printerClient.printEnd === 'function') {
-           await printerClient.printEnd().catch(() => {});
-        }
-      }
+    script.onerror = () => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error("Nie udało się załadować odpowiedzi JSONP z Apps Script."));
     };
-  </script>
+
+    const separator = url.includes("?") ? "&" : "?";
+    script.src =
+      url +
+      separator +
+      "key=" + encodeURIComponent(key) +
+      "&callback=" + encodeURIComponent(callbackName) +
+      "&_=" + Date.now();
+
+    log("GET Apps Script JSONP:", script.src.replace(/key=[^&]+/, "key=***"));
+
+    document.head.appendChild(script);
+  });
+}
+
+$("loadReceipt").onclick = async () => {
+  $("loadReceipt").disabled = true;
+  setGlobalStatus("Pobieram ostatni paragon…", "warn");
+
+  try {
+    const data = await fetchLatestReceipt();
+
+    log("Odpowiedź Apps Script:", data);
+
+    if (!data || data.status !== "ok") {
+      throw new Error(
+        "Apps Script zwrócił status: " +
+        (data ? safeString(data) : "brak danych")
+      );
+    }
+
+    currentReceipt = {
+      customId: String(data.customId || ""),
+      date: String(data.date || ""),
+      note: String(data.note || "")
+    };
+
+    $("receiptData").innerHTML = `
+      <div class="data">
+        <div>ID paragonu</div><div>${escapeHtml(currentReceipt.customId)}</div>
+        <div>Data</div><div>${escapeHtml(currentReceipt.date)}</div>
+        <div>Kod / note</div><div>${escapeHtml(currentReceipt.note || "Brak")}</div>
+      </div>
+    `;
+
+    drawLabel(currentReceipt);
+
+    setGlobalStatus("Dane pobrane i etykieta gotowa.", "ok");
+    log("✅ Paragon pobrany poprawnie.");
+  } catch (e) {
+    logError("Pobieranie paragonu", e);
+  } finally {
+    $("loadReceipt").disabled = false;
+  }
+};
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+/* ============================================================
+   ETYKIETA
+   ============================================================ */
+
+async function makeQrDataUrl(text) {
+  const holder = $("qrScratch");
+  holder.innerHTML = "";
+
+  return new Promise((resolve, reject) => {
+    if (!window.QRCode) {
+      reject(new Error("Biblioteka QRCode.js nie została załadowana."));
+      return;
+    }
+
+    try {
+      new QRCode(holder, {
+        text: String(text || ""),
+        width: 180,
+        height: 180,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      setTimeout(() => {
+        const qrCanvas = holder.querySelector("canvas");
+        if (!qrCanvas) {
+          reject(new Error("QRCode.js nie utworzył canvasa."));
+          return;
+        }
+        resolve(qrCanvas.toDataURL("image/png"));
+      }, 50);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+async function drawLabel(receipt) {
+  const ctx = labelCanvas.getContext("2d");
+
+  ctx.clearRect(0, 0, LABEL_W, LABEL_H);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, LABEL_W, LABEL_H);
+
+  ctx.fillStyle = "#000000";
+  ctx.strokeStyle = "#000000";
+
+  /* Ramka */
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, LABEL_W - 2, LABEL_H - 2);
+
+  /* QR */
+  try {
+    const qrData = await makeQrDataUrl(receipt.note || receipt.customId);
+
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 20, 30, 180, 180);
+        resolve();
+      };
+      img.onerror = reject;
+      img.src = qrData;
+    });
+
+  } catch (e) {
+    logError("Generowanie QR", e);
+    ctx.font = "bold 18px Arial";
+    ctx.fillText("QR ERROR", 40, 120);
+  }
+
+  /* Tekst */
+  ctx.fillStyle = "#000";
+  ctx.textAlign = "left";
+
+  ctx.font = "bold 34px Arial";
+  ctx.fillText("BUTELKOBUS", 225, 55);
+
+  ctx.font = "bold 18px Arial";
+  ctx.fillText("Data odbioru:", 225, 88);
+
+  ctx.font = "18px Arial";
+  ctx.fillText(fitText(receipt.date, 335), 225, 112);
+
+  ctx.font = "bold 18px Arial";
+  ctx.fillText("Kod worka:", 225, 145);
+
+  ctx.font = "bold 26px Arial";
+  ctx.fillText(fitText(receipt.note || "BRAK", 320), 225, 174);
+
+  ctx.font = "bold 16px Arial";
+  ctx.fillText("ID PARAGONU:", 225, 202);
+
+  ctx.font = "16px Arial";
+  ctx.fillText(fitText(receipt.customId, 330), 225, 224);
+
+  log(`Etykieta narysowana: ${LABEL_W}×${LABEL_H}px.`);
+}
+
+function fitText(text, maxWidth) {
+  const ctx = labelCanvas.getContext("2d");
+  let s = String(text || "");
+  while (ctx.measureText(s).width > maxWidth && s.length > 3) {
+    s = s.slice(0, -1);
+  }
+  if (s !== String(text || "")) s += "…";
+  return s;
+}
+
+/* ============================================================
+   NIIMBLUELIB
+   ============================================================ */
+
+function libraryCheck() {
+  if (!window.niimbluelib) {
+    throw new Error(
+      "NiimBlueLib nie jest załadowany. Sprawdź internet/CDN oraz DevTools → Console."
+    );
+  }
+
+  log("NiimBlueLib załadowany.", {
+    keys: Object.keys(window.niimbluelib).sort()
+  });
+
+  if (!window.niimbluelib.NiimbotBluetoothClient) {
+    throw new Error("Brak NiimbotBluetoothClient w niimbluelib.");
+  }
+
+  if (!window.niimbluelib.ImageEncoder) {
+    throw new Error("Brak ImageEncoder w niimbluelib.");
+  }
+}
+
+function attachClientLogs(c) {
+  if (!c || !c.on) {
+    log("⚠️ client.on() niedostępne — biblioteka ma inne API zdarzeń.");
+    return;
+  }
+
+  c.on("packetsent", e => {
+    try {
+      const hex = window.niimbluelib.Utils?.bufToHex
+        ? window.niimbluelib.Utils.bufToHex(e.packet.toBytes())
+        : e.packet.toBytes();
+      const map = window.niimbluelib.RequestCommandId || {};
+      log("BLE >> " + hex + " [" + (map[e.packet.command] ?? e.packet.command) + "]");
+    } catch (err) {
+      logError("Log pakietu packetsent", err);
+    }
+  });
+
+  c.on("packetreceived", e => {
+    try {
+      const hex = window.niimbluelib.Utils?.bufToHex
+        ? window.niimbluelib.Utils.bufToHex(e.packet.toBytes())
+        : e.packet.toBytes();
+      const map = window.niimbluelib.ResponseCommandId || {};
+      log("BLE << " + hex + " [" + (map[e.packet.command] ?? e.packet.command) + "]");
+    } catch (err) {
+      logError("Log pakietu packetreceived", err);
+    }
+  });
+
+  c.on("connect", () => {
+    log("✅ EVENT: connect");
+  });
+
+  c.on("disconnect", () => {
+    log("⚠️ EVENT: disconnect");
+    $("disconnectBtn").disabled = true;
+    $("connectBtn").disabled = false;
+    $("printerInfoBtn").disabled = true;
+    $("testPrintBtn").disabled = true;
+    $("printBtn").disabled = true;
+    setGlobalStatus("Drukarka rozłączona.", "warn");
+  });
+
+  c.on("printprogress", e => {
+    log(
+      `POSTĘP: strona ${e.page}/${e.pagesTotal}, ` +
+      `druk ${e.pagePrintProgress}%, ` +
+      `podawanie ${e.pageFeedProgress}%`
+    );
+  });
+}
+
+async function connectPrinter() {
+  libraryCheck();
+
+  if (client) {
+    try { await client.disconnect(); } catch (_) {}
+    client = null;
+  }
+
+  log("Tworzę NiimbotBluetoothClient…");
+  client = new window.niimbluelib.NiimbotBluetoothClient();
+
+  attachClientLogs(client);
+
+  setGlobalStatus("Czekam na wybór drukarki Bluetooth…", "warn");
+
+  try {
+    await client.connect();
+
+    log("✅ client.connect() zakończone.");
+
+    let task = null;
+    try {
+      task = client.getPrintTaskType?.();
+    } catch (e) {
+      logError("getPrintTaskType()", e);
+    }
+
+    log("Wykryty Print Task:", task || "brak automatycznej detekcji");
+
+    if (task) {
+      const select = $("taskSelect");
+      const optionExists = [...select.options].some(o => o.value === task);
+      if (!optionExists) {
+        const opt = document.createElement("option");
+        opt.value = task;
+        opt.textContent = task + " (wykryty)";
+        select.appendChild(opt);
+      }
+      select.value = task;
+    }
+
+    await fetchPrinterInfo();
+
+    $("disconnectBtn").disabled = false;
+    $("connectBtn").disabled = true;
+    $("printerInfoBtn").disabled = false;
+    $("testPrintBtn").disabled = false;
+    $("printBtn").disabled = false;
+
+    setGlobalStatus("NIIMBOT połączony.", "ok");
+  } catch (e) {
+    logError("Łączenie z NIIMBOT", e);
+
+    try {
+      if (client) await client.disconnect();
+    } catch (_) {}
+
+    client = null;
+    $("disconnectBtn").disabled = true;
+    $("connectBtn").disabled = false;
+  }
+}
+
+$("connectBtn").onclick = connectPrinter;
+
+$("disconnectBtn").onclick = async () => {
+  try {
+    if (client) {
+      log("Rozłączanie…");
+      await client.disconnect();
+    }
+  } catch (e) {
+    logError("Rozłączanie", e);
+  } finally {
+    client = null;
+  }
+};
+
+/* ============================================================
+   INFO DRUKARKI
+   ============================================================ */
+
+async function fetchPrinterInfo() {
+  if (!client) throw new Error("Brak połączenia z drukarką.");
+
+  log("Wywołuję fetchPrinterInfo()…");
+
+  try {
+    await client.fetchPrinterInfo();
+  } catch (e) {
+    logError("fetchPrinterInfo()", e);
+  }
+
+  let info = null;
+
+  try {
+    info = client.getPrinterInfo?.();
+  } catch (e) {
+    logError("getPrinterInfo()", e);
+  }
+
+  let task = null;
+  try {
+    task = client.getPrintTaskType?.();
+  } catch (_) {}
+
+  log("getPrinterInfo():", info);
+  log("getPrintTaskType():", task);
+
+  $("printerInfo").innerHTML =
+    `<div><span class="pill">Połączona</span>` +
+    `<span class="pill">Task: ${escapeHtml(task || "brak")}</span></div>` +
+    `<pre style="white-space:pre-wrap">${escapeHtml(safeString(info))}</pre>`;
+
+  return info;
+}
+
+$("printerInfoBtn").onclick = async () => {
+  try {
+    await fetchPrinterInfo();
+    setGlobalStatus("Informacje drukarki pobrane.", "ok");
+  } catch (e) {
+    logError("Informacje drukarki", e);
+  }
+};
+
+/* ============================================================
+   ENCODER — obsługa różnych wariantów API
+   ============================================================ */
+
+function encodeForPrinter(canvas) {
+  const lib = window.niimbluelib;
+  const Encoder = lib.ImageEncoder;
+
+  if (!Encoder || typeof Encoder.encodeCanvas !== "function") {
+    throw new Error("ImageEncoder.encodeCanvas() nie istnieje.");
+  }
+
+  const direction = $("direction").value;
+  const pageColor =
+    lib.PageColorType && lib.PageColorType.SingleColor !== undefined
+      ? lib.PageColorType.SingleColor
+      : 0;
+
+  log("ImageEncoder.encodeCanvas.length =", Encoder.encodeCanvas.length);
+  log("Parametry kodowania:", { direction, pageColor });
+
+  let encoded;
+
+  /*
+    W różnych wersjach NiimBlueLib API encodeCanvas miało różną sygnaturę.
+    Nie zgadujemy koloru jako drugiego argumentu.
+  */
+  if (Encoder.encodeCanvas.length >= 3) {
+    encoded = Encoder.encodeCanvas(canvas, pageColor, direction);
+  } else {
+    encoded = Encoder.encodeCanvas(canvas, direction);
+  }
+
+  /*
+    W nowszym API EncodedImage posiada pageColor. Jeżeli konkretna wersja
+    go nie ustawiła, ustawiamy single-color — bez monkey-patchowania klas.
+  */
+  if (
+    encoded &&
+    encoded.pageColor === undefined &&
+    pageColor !== undefined
+  ) {
+    encoded.pageColor = pageColor;
+  }
+
+  if (!encoded) {
+    throw new Error("Encoder zwrócił pusty EncodedImage.");
+  }
+
+  log("EncodedImage:", {
+    cols: encoded.cols,
+    rows: encoded.rows,
+    rowsData: encoded.rowsData?.length,
+    pageColor: encoded.pageColor
+  });
+
+  return encoded;
+}
+
+/* ============================================================
+   UTWORZENIE PRINT TASK
+   ============================================================ */
+
+function createPrintTask(taskName, options) {
+  if (!client) throw new Error("Brak klienta NIIMBOT.");
+
+  log("Tworzenie PrintTask:", { taskName, options });
+
+  /*
+    Aktualny przykład NiimBlueLib używa:
+      client.protocol.newPrintTask(...)
+    Starsza wersja, którą mieliśmy wcześniej, używała:
+      client.abstraction.newPrintTask(...)
+  */
+
+  if (client.protocol && typeof client.protocol.newPrintTask === "function") {
+    log("Używam client.protocol.newPrintTask().");
+    return client.protocol.newPrintTask(taskName, options);
+  }
+
+  if (client.abstraction && typeof client.abstraction.newPrintTask === "function") {
+    log("Używam client.abstraction.newPrintTask() — fallback.");
+    return client.abstraction.newPrintTask(taskName, options);
+  }
+
+  throw new Error(
+    "Nie znaleziono client.protocol.newPrintTask() ani " +
+    "client.abstraction.newPrintTask(). " +
+    "To jest niezgodność wersji NiimBlueLib."
+  );
+}
+
+/* ============================================================
+   TEST DRUKARKI
+   ============================================================ */
+
+function drawTestLabel() {
+  const ctx = labelCanvas.getContext("2d");
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, LABEL_W, LABEL_H);
+
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, LABEL_W - 4, LABEL_H - 4);
+
+  ctx.fillStyle = "black";
+  ctx.font = "bold 40px Arial";
+  ctx.fillText("NIIMBOT TEST", 40, 70);
+
+  ctx.font = "24px Arial";
+  ctx.fillText("BUTELKOBUS B3S_P", 40, 110);
+
+  ctx.font = "20px Arial";
+  ctx.fillText("586 x 240 px", 40, 145);
+
+  ctx.font = "18px Arial";
+  ctx.fillText(new Date().toLocaleString("pl-PL"), 40, 180);
+
+  ctx.fillRect(420, 45, 100, 100);
+  ctx.clearRect(445, 70, 50, 50);
+}
+
+async function printCanvas(canvas, description) {
+  if (!client) throw new Error("Drukarka nie jest połączona.");
+
+  const taskName = $("taskSelect").value;
+  const quantity = Math.max(1, Math.min(20, Number($("copies").value) || 1));
+  const density = Number($("density").value) || 3;
+
+  log("================================================");
+  log("START DRUKU: " + description);
+  log("Task:", taskName);
+  log("Kopie:", quantity);
+  log("Gęstość:", density);
+  log("Kierunek:", $("direction").value);
+
+  const encoded = encodeForPrinter(canvas);
+
+  const options = {
+    totalPages: quantity,
+    statusPollIntervalMs: 100,
+    statusTimeoutMs: 10000,
+    pageColor:
+      window.niimbluelib.PageColorType?.SingleColor ?? 0,
+    density: density
+  };
+
+  const printTask = createPrintTask(taskName, options);
+
+  log("PrintTask utworzony:", {
+    constructor: printTask?.constructor?.name,
+    methods: printTask
+      ? Object.getOwnPropertyNames(Object.getPrototypeOf(printTask))
+      : []
+  });
+
+  let initOK = false;
+  let pageOK = false;
+
+  try {
+    setGlobalStatus("Inicjalizacja druku…", "warn");
+    log("→ printInit()");
+    await printTask.printInit();
+    initOK = true;
+    log("✅ printInit() OK");
+
+    setGlobalStatus("Wysyłam obraz do drukarki…", "warn");
+    log("→ printPage(encoded, quantity)");
+    await printTask.printPage(encoded, quantity);
+    pageOK = true;
+    log("✅ printPage() OK");
+
+    /*
+      W aktualnym przykładzie biblioteki istnieje waitForPageFinished().
+      Starsze warianty mogą go nie mieć.
+    */
+    if (typeof printTask.waitForPageFinished === "function") {
+      log("→ waitForPageFinished()");
+      await printTask.waitForPageFinished();
+      log("✅ waitForPageFinished() OK");
+    } else {
+      log("ℹ️ waitForPageFinished() brak — pomijam.");
+    }
+
+    log("→ waitForFinished()");
+    await printTask.waitForFinished();
+    log("✅ waitForFinished() OK");
+
+    setGlobalStatus("DRUK ZAKOŃCZONY POMYŚLNIE", "ok");
+    log("🎉 DRUK ZAKOŃCZONY POMYŚLNIE.");
+  } catch (e) {
+    logError(
+      "DRUK NIEUDANY" +
+      ` [init=${initOK}, page=${pageOK}]`,
+      e
+    );
+    throw e;
+  } finally {
+    /*
+      printEnd() powinien zostać wykonany, jeśli jest dostępny.
+      Robimy to nawet po błędzie, żeby poprawnie zamknąć zadanie.
+    */
+    if (printTask && typeof printTask.printEnd === "function") {
+      try {
+        log("→ printEnd()");
+        await printTask.printEnd();
+        log("✅ printEnd() OK");
+      } catch (e) {
+        logError("printEnd()", e);
+      }
+    } else {
+      log("ℹ️ printEnd() nie jest dostępne w tym PrintTask.");
+    }
+  }
+}
+
+$("testPrintBtn").onclick = async () => {
+  const oldReceipt = currentReceipt;
+
+  try {
+    drawTestLabel();
+    await printCanvas(labelCanvas, "TEST B3S_P");
+  } catch (e) {
+    logError("TEST DRUKARKI", e);
+  } finally {
+    if (oldReceipt) {
+      await drawLabel(oldReceipt);
+    }
+  }
+};
+
+$("printBtn").onclick = async () => {
+  if (!currentReceipt) {
+    setGlobalStatus("Najpierw pobierz ostatni paragon.", "warn");
+    log("⚠️ Próba druku bez danych paragonu.");
+    return;
+  }
+
+  try {
+    await drawLabel(currentReceipt);
+    await printCanvas(labelCanvas, "ETYKIETA PARAGONU " + currentReceipt.customId);
+  } catch (e) {
+    logError("DRUK ETYKIETY", e);
+  }
+};
+
+/* ============================================================
+   LOG UI
+   ============================================================ */
+
+$("clearLog").onclick = () => {
+  $("log").value = "";
+  log("Log wyczyszczony.");
+};
+
+$("copyLog").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("log").value);
+    log("Log skopiowany do schowka.");
+  } catch (e) {
+    logError("Kopiowanie logu", e);
+  }
+};
+
+/* ============================================================
+   START
+   ============================================================ */
+
+(async function init() {
+  loadSettings();
+
+  log("================================================");
+  log("BUTELKOBUS PANEL START");
+  log("Canvas:", `${LABEL_W}×${LABEL_H}`);
+  log("User agent:", navigator.userAgent);
+  log("Web Bluetooth:", "bluetooth" in navigator ? "TAK" : "NIE");
+
+  try {
+    libraryCheck();
+    setGlobalStatus("Panel gotowy. Najpierw połącz NIIMBOT.", "warn");
+  } catch (e) {
+    logError("Start biblioteki", e);
+  }
+
+  /* Początkowy podgląd */
+  if (!currentReceipt) {
+    drawTestLabel();
+  }
+})();
+</script>
 </body>
 </html>
+'''
+
+path = Path("/mnt/data/index.html")
+path.write_text(html, encoding="utf-8")
+print(f"Utworzono: {path}")
+print(f"Rozmiar: {path.stat().st_size:,} bajtów")
