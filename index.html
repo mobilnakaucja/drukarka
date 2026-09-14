@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drukarka ButelkoBus</title>
   
+  <!-- KLUCZ: Koniec z @latest. Wymuszamy stabilną wersję 0.9. To naprawia WSZYSTKO. -->
+  <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@0.9/dist/umd/niimbluelib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   
   <style>
@@ -28,14 +30,14 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Ultimate)</h2>
+    <h2>Drukarka Niimbot B3S (Czysta Wersja 0.9)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     
     <div style="text-align: left; margin: 10px 0;">
-      <label style="font-size: 13px; font-weight: bold; color: #475569;">Wymuś silnik (B21V1 = B3S):</label>
+      <label style="font-size: 13px; font-weight: bold; color: #475569;">Wybór silnika:</label>
       <select id="taskSelect" class="select-box">
         <option value="B21V1">B21V1 (Zalecany dla B3S)</option>
-        <option value="B1">B1 (Starsze B3S)</option>
+        <option value="B1">B1 (Starsze modele B)</option>
         <option value="D110">D110</option>
       </select>
     </div>
@@ -56,34 +58,39 @@
     
     <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
     
-    <div id="debugBox">Ładowanie niezależnych modułów (ESM)...</div>
+    <div id="debugBox">Sprawdzanie stabilnej biblioteki...</div>
 
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
 
-  <script type="module">
-    import * as niimblue from 'https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/+esm';
-    
-    window.niimbluelib = niimblue;
-    const box = document.getElementById('debugBox');
-    if (box) box.innerText = "Silnik ESM załadowany! Kliknij 'Połącz z drukarką'.";
+  <script>
+    let printerClient = null;
+    let currentId = "";
+    let currentDate = "";
+    let currentNote = "";
 
-    window.printerClient = null;
-    window.currentId = "";
-    window.currentDate = "";
-    window.currentNote = "";
+    function logMsg(msg) {
+      const box = document.getElementById('debugBox');
+      if (box) {
+        box.innerText += "\n" + msg;
+        box.scrollTop = box.scrollHeight;
+      }
+    }
 
-    window.logMsg = function(msg) {
-      const debugBox = document.getElementById('debugBox');
-      if (debugBox) {
-        debugBox.innerText += "\n" + msg;
-        debugBox.scrollTop = debugBox.scrollHeight;
+    window.onload = function() {
+      pobierzOstatniParagon();
+      const box = document.getElementById('debugBox');
+      if (window.niimbluelib) {
+        box.innerText = "Silnik 0.9 gotowy! Kliknij 'Połącz z drukarką'.";
+      } else {
+        box.innerText = "Błąd: Odśwież stronę (brak biblioteki).";
       }
     };
 
-    window.odrysujEtykiete = function(idParagonu, dataParagonu, nrWorka) {
+    function odrysujEtykiete(idParagonu, dataParagonu, nrWorka) {
       const canvas = document.getElementById('previewCanvas');
       const ctx = canvas.getContext('2d');
+
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, 384, 240);
       ctx.fillStyle = "#000000";
@@ -116,42 +123,45 @@
           if (!err) ctx.drawImage(tempCanvas, 10, 30);
         });
       }
-    };
+    }
 
-    window.konfigurujPolaczenie = function() {
+    function konfigurujPolaczenie() {
       let url = prompt("Wklej link wdrożenia Apps Script (/exec):", localStorage.getItem("bb_url") || "");
       if (url) localStorage.setItem("bb_url", url.trim());
       let key = prompt("Wpisz swój tajny PIN / Klucz:", localStorage.getItem("bb_key") || "");
       if (key) localStorage.setItem("bb_key", key.trim());
-      window.pobierzOstatniParagon();
-    };
+      pobierzOstatniParagon();
+    }
 
-    window.pobierzOstatniParagon = function() {
+    function pobierzOstatniParagon() {
       let url = localStorage.getItem("bb_url");
       let key = localStorage.getItem("bb_key");
+      
       if (!url || !key) {
         document.getElementById('lblId').innerText = "Kliknij ⚙️ Ustawienia poniżej";
         return;
       }
+
       let starySkrypt = document.getElementById("jsonp_script");
       if (starySkrypt) starySkrypt.remove();
-      
+
       window.obsluzDaneParagonu = function(json) {
         if (json.status === "ok") {
-          window.currentId = json.customId;
-          window.currentDate = json.date;
-          window.currentNote = json.note || "Brak";
-          document.getElementById('lblId').innerText = window.currentId;
-          document.getElementById('lblDate').innerText = window.currentDate;
-          document.getElementById('lblNote').innerText = window.currentNote;
-          window.odrysujEtykiete(window.currentId, window.currentDate, window.currentNote);
+          currentId = json.customId;
+          currentDate = json.date;
+          currentNote = json.note || "Brak";
+          document.getElementById('lblId').innerText = currentId;
+          document.getElementById('lblDate').innerText = currentDate;
+          document.getElementById('lblNote').innerText = currentNote;
+          odrysujEtykiete(currentId, currentDate, currentNote);
         } else {
           document.getElementById('lblId').innerText = "Błąd: " + (json.message || "Brak autoryzacji");
         }
       };
-      
+
       let separator = url.indexOf('?') !== -1 ? '&' : '?';
       let fullUrl = url + separator + "key=" + encodeURIComponent(key) + "&callback=obsluzDaneParagonu&_ts=" + new Date().getTime();
+
       let script = document.createElement("script");
       script.id = "jsonp_script";
       script.src = fullUrl;
@@ -159,122 +169,85 @@
         document.getElementById('lblId').innerText = "Błąd sieci lub zły URL";
       };
       document.body.appendChild(script);
-    };
+    }
 
-    window.polaczZNiimbot = async function() {
+    async function polaczZNiimbot() {
       try {
         if (!window.niimbluelib) {
-          alert("Moduł jeszcze się ładuje...");
+          alert("Poczekaj chwilę na załadowanie biblioteki.");
           return;
         }
-        window.logMsg("Szukanie drukarki Bluetooth...");
-        window.printerClient = new window.niimbluelib.NiimbotBluetoothClient();
-        await window.printerClient.connect();
-        window.logMsg("Pobieranie danych...");
-        await window.printerClient.fetchPrinterInfo();
-        const info = window.printerClient.getPrinterInfo();
+        logMsg("Szukanie drukarki Bluetooth...");
+        printerClient = new window.niimbluelib.NiimbotBluetoothClient();
+        await printerClient.connect();
+
+        logMsg("Pobieranie danych o drukarce...");
+        await printerClient.fetchPrinterInfo();
+        const info = printerClient.getPrinterInfo();
+
         const badge = document.getElementById('btStatus');
         badge.innerText = "Bluetooth: " + (info?.modelName || "Połączono");
         badge.className = "status-badge status-on";
-        window.logMsg("Połączono z: " + (info?.modelName || "Niimbot") + "!");
+        logMsg("Połączono z: " + (info?.modelName || "Niimbot") + "! Gotowa.");
       } catch (err) {
-        window.logMsg("Błąd połączenia: " + err.message);
+        logMsg("Błąd połączenia: " + err.message);
       }
-    };
+    }
 
-    window.drukujEtykiete = async function() {
-      if (!window.printerClient || !window.printerClient.isConnected()) {
+    async function drukujEtykiete() {
+      if (!printerClient || !printerClient.isConnected()) {
         alert("Najpierw kliknij: Połącz z drukarką!");
         return;
       }
+
       const btn = document.getElementById('btnPrint');
       btn.disabled = true;
-      
-      const idDoDruku = window.currentId || document.getElementById('lblId').innerText;
-      window.odrysujEtykiete(idDoDruku, window.currentDate, window.currentNote);
+
+      const idDoDruku = currentId || document.getElementById('lblId').innerText;
+      odrysujEtykiete(idDoDruku, currentDate, currentNote);
       await new Promise(r => setTimeout(r, 100));
       const canvas = document.getElementById('previewCanvas');
-      
-      window.logMsg("--- START DRUKU ---");
-      
-      // Zapisujemy oryginalne funkcje jądra przeglądarki, żeby ich trwale nie zepsuć
-      const origIncludes = Array.prototype.includes;
-      const origIndexOf = Array.prototype.indexOf;
 
+      logMsg("--- START DRUKU ---");
       try {
         const lib = window.niimbluelib;
-        
-        window.logMsg("Kodowanie grafiki...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas);
-        
-        // Zabezpieczamy pakiet dla samej drukarki
-        encoded.color = "black";
-        
-        let printTaskName = document.getElementById('taskSelect').value;
-        window.logMsg("Tworzenie obiektu silnika: " + printTaskName);
-        
-        const className = printTaskName + "PrintTask";
-        const TaskClass = lib[className];
-        if (!TaskClass) throw new Error("Nie odnaleziono klasy: " + className);
 
-        const printTask = new TaskClass(window.printerClient, {
+        logMsg("Kodowanie grafiki...");
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
+
+        // Gwarancja dla starszych silników
+        encoded.color = "black";
+
+        let printTaskName = document.getElementById('taskSelect').value;
+        logMsg("Inicjalizacja sterownika: " + printTaskName);
+
+        // Używamy czystej metody z wersji 0.9 (bez żadnych hacków i nadpisywania prototypów)
+        const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // Dla papieru ciągłego ButelkoBusa
+          labelType: 3 // Papier ButelkoBusa
         });
-        
-        // 🛠️ ŁATKA 1: Naprawiamy urwaną komunikację (to działało przed chwilą)
-        if (printTask.protocol && typeof printTask.protocol.sendAll !== 'function') {
-           window.logMsg("Wstrzykiwanie łatki protokołu...");
-           printTask.protocol.sendAll = async function(packets) {
-              if (!Array.isArray(packets)) packets = [packets];
-              const sendFunc = window.printerClient.sendPacket || window.printerClient.send || window.printerClient.write;
-              for (let p of packets) {
-                 await sendFunc.call(window.printerClient, p);
-                 await new Promise(res => setTimeout(res, 5));
-              }
-           };
-        }
-        
-        window.logMsg("Inicjalizacja (czyszczenie bufora)...");
+
+        logMsg("Czyszczenie głowicy...");
         await printTask.printInit();
-        
-        // 🚨 ŁATKA OSTATECZNA: WYŁĄCZAMY WALIDATOR (NUKLEARNY HACK) 🚨
-        window.logMsg("Włamywanie do walidatora (Zaraz drukuje!)...");
-        
-        Array.prototype.includes = function(val) {
-           if (val === 'black' || val === undefined) return true; // Cokolwiek nasza apka zapyta, krzyczymy: ZGADZA SIĘ!
-           return origIncludes.apply(this, arguments);
-        };
-        Array.prototype.indexOf = function(val) {
-           if (val === 'black' || val === undefined) return 0;
-           return origIndexOf.apply(this, arguments);
-        };
 
-        // Tu wydarza się wypalanie (przeglądarka ma teraz zawiązane oczy na błędy)
+        logMsg("Wypalanie etykiety...");
         await printTask.printPage(encoded, 1);
-        
-        window.logMsg("Oczekiwanie...");
-        await printTask.waitForFinished();
-        
-        window.logMsg("✅ Sukces! Wydrukowano.");
-      } catch (err) {
-        window.logMsg("❌ Błąd: " + err.message);
-      } finally {
-        // Natychmiast przywracamy naturalne zachowanie przeglądarce!
-        Array.prototype.includes = origIncludes;
-        Array.prototype.indexOf = origIndexOf;
 
-        if (window.printerClient && typeof window.printerClient.printEnd === 'function') {
-           await window.printerClient.printEnd().catch(()=>{});
+        logMsg("Oczekiwanie na zakończenie...");
+        await printTask.waitForFinished();
+
+        logMsg("✅ Sukces! Wydruk zrealizowany.");
+      } catch (err) {
+        logMsg("❌ Błąd druku: " + err.message);
+      } finally {
+        if (printerClient && printerClient.abstraction) {
+          await printerClient.abstraction.printEnd().catch(()=>{});
         }
         btn.disabled = false;
       }
-    };
-    
-    // Uruchomienie na starcie
-    window.pobierzOstatniParagon();
+    }
   </script>
 </body>
 </html>
