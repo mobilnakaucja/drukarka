@@ -28,7 +28,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Moduł Czysty)</h2>
+    <h2>Drukarka Niimbot B3S (Patch)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     
     <div style="text-align: left; margin: 10px 0;">
@@ -38,7 +38,6 @@
         <option value="auto">Wykryj automatycznie</option>
         <option value="B1">B1 (Starsze B3S)</option>
         <option value="D110">D110</option>
-        <option value="V5">V5</option>
       </select>
     </div>
 
@@ -204,28 +203,52 @@
         window.logMsg("Kodowanie grafiki...");
         const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
         
+        // Zabezpieczenie koloru (kasuje błąd "Page color left is not supported")
+        const naprawKolory = (obj) => {
+           if(!obj || typeof obj !== 'object') return;
+           if(obj instanceof Uint8Array || obj instanceof ArrayBuffer) return;
+           if('color' in obj && (obj.color === 'left' || obj.color === 'top')) {
+              obj.color = 'black';
+           }
+           Object.values(obj).forEach(naprawKolory);
+        };
+        naprawKolory(encoded);
+        
         let printTaskName = document.getElementById('taskSelect').value;
         if (printTaskName === "auto") {
-           printTaskName = window.printerClient.getPrintTaskType() ?? "D110";
+           printTaskName = window.printerClient.getPrintTaskType() ?? "B1";
         }
         
-        window.logMsg("Uruchamianie silnika: " + printTaskName);
+        window.logMsg("Tworzenie obiektu silnika: " + printTaskName);
         
         const className = printTaskName + "PrintTask";
         const TaskClass = lib[className];
         
         if (!TaskClass) {
-          throw new Error("Nie odnaleziono klasy sterownika: " + className);
+          throw new Error("Nie odnaleziono klasy: " + className);
         }
 
         const printTask = new TaskClass(window.printerClient, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // Dla papieru ciągłego bez szparek
+          labelType: 3 // 3 = Rolka ciągła bez odstępów
         });
         
-        window.logMsg("Inicjalizacja...");
+        // 🛠️ HOT-PATCH: Uzupełniamy brakującą funkcję w bibliotece
+        if (printTask.protocol && typeof printTask.protocol.sendAll !== 'function') {
+           window.logMsg("Wstrzykiwanie łatki protokołu...");
+           printTask.protocol.sendAll = async function(packets) {
+              if (!Array.isArray(packets)) packets = [packets];
+              for (let p of packets) {
+                 await window.printerClient.sendPacket(p);
+                 // 5ms opóźnienia na każdy wysłany pakiet, żeby bluetooth się nie zadławił
+                 await new Promise(res => setTimeout(res, 5));
+              }
+           };
+        }
+        
+        window.logMsg("Inicjalizacja (czyszczenie bufora)...");
         await printTask.printInit();
         
         window.logMsg("Wypalanie grafiki...");
