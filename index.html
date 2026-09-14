@@ -28,7 +28,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Patch)</h2>
+    <h2>Drukarka Niimbot B3S (Pełny Bypass)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     
     <div style="text-align: left; margin: 10px 0;">
@@ -201,22 +201,12 @@
         const lib = window.niimbluelib;
         
         window.logMsg("Kodowanie grafiki...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
-        
-        // Zabezpieczenie koloru (kasuje błąd "Page color left is not supported")
-        const naprawKolory = (obj) => {
-           if(!obj || typeof obj !== 'object') return;
-           if(obj instanceof Uint8Array || obj instanceof ArrayBuffer) return;
-           if('color' in obj && (obj.color === 'left' || obj.color === 'top')) {
-              obj.color = 'black';
-           }
-           Object.values(obj).forEach(naprawKolory);
-        };
-        naprawKolory(encoded);
+        // 1. Zmiana: Kodujemy całkowicie na domyślnych ustawieniach, bez "left", "top" czy "black".
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas);
         
         let printTaskName = document.getElementById('taskSelect').value;
         if (printTaskName === "auto") {
-           printTaskName = window.printerClient.getPrintTaskType() ?? "B1";
+           printTaskName = window.printerClient.getPrintTaskType() ?? "B21V1";
         }
         
         window.logMsg("Tworzenie obiektu silnika: " + printTaskName);
@@ -232,17 +222,27 @@
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // 3 = Rolka ciągła bez odstępów
+          labelType: 3 // 3 = Rolka ciągła (papier bez czujnika odstępu)
         });
         
-        // 🛠️ HOT-PATCH: Uzupełniamy brakującą funkcję w bibliotece
+        // 2. Ostateczne odcięcie błędów koloru (Monkey Patch) - zaślepiamy wbudowane sprawdzacze
+        if (typeof printTask.supportColor === 'function') printTask.supportColor = () => true;
+        if (typeof printTask.isSupportedColor === 'function') printTask.isSupportedColor = () => true;
+        if (typeof printTask.isColorSupported === 'function') printTask.isColorSupported = () => true;
+        
+        // 3. HOT-PATCH: Uzupełniamy brakującą funkcję w bibliotece (Działa idealnie!)
         if (printTask.protocol && typeof printTask.protocol.sendAll !== 'function') {
            window.logMsg("Wstrzykiwanie łatki protokołu...");
            printTask.protocol.sendAll = async function(packets) {
               if (!Array.isArray(packets)) packets = [packets];
+              
+              // dynamicznie znajdujemy metodę wysyłającą wewnątrz klienta
+              const sendFunc = window.printerClient.sendPacket || window.printerClient.send || window.printerClient.write;
+              if (!sendFunc) throw new Error("Klient nie posiada metody wysyłającej!");
+              
               for (let p of packets) {
-                 await window.printerClient.sendPacket(p);
-                 // 5ms opóźnienia na każdy wysłany pakiet, żeby bluetooth się nie zadławił
+                 await sendFunc.call(window.printerClient, p);
+                 // małe opóźnienie, żeby Bluetooth się nie zatkał pakietami grafiki
                  await new Promise(res => setTimeout(res, 5));
               }
            };
