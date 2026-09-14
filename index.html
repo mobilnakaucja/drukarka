@@ -28,7 +28,7 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Silnik Oficjalny)</h2>
+    <h2>Drukarka Niimbot B3S (Moduł Czysty)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     
     <div style="text-align: left; margin: 10px 0;">
@@ -63,7 +63,6 @@
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
 
-  <!-- ŁADUJEMY BIBLIOTEKĘ DOKŁADNIE TAK JAK OFICJALNA APKA -->
   <script type="module">
     import * as niimblue from 'https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/+esm';
     
@@ -212,11 +211,18 @@
         
         window.logMsg("Uruchamianie silnika: " + printTaskName);
         
-        const printTask = window.printerClient.abstraction.newPrintTask(printTaskName, {
+        const className = printTaskName + "PrintTask";
+        const TaskClass = lib[className];
+        
+        if (!TaskClass) {
+          throw new Error("Nie odnaleziono klasy sterownika: " + className);
+        }
+
+        const printTask = new TaskClass(window.printerClient, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // Dla papieru ButelkoBusa (Rolka ciągła)
+          labelType: 3 // Dla papieru ciągłego bez szparek
         });
         
         window.logMsg("Inicjalizacja...");
@@ -232,8 +238,8 @@
       } catch (err) {
         window.logMsg("❌ Błąd: " + err.message);
       } finally {
-        if (window.printerClient && window.printerClient.abstraction) {
-          await window.printerClient.abstraction.printEnd().catch(()=>{});
+        if (window.printerClient && typeof window.printerClient.printEnd === 'function') {
+           await window.printerClient.printEnd().catch(()=>{});
         }
         btn.disabled = false;
       }
