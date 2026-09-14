@@ -7,65 +7,159 @@
 
   <!--
     NiimBlueLib:
-    Dokładnie przypięta wersja. Nie używamy @latest, ponieważ autor biblioteki
-    ostrzega, że API może się zmieniać.
+    Przypięta wersja biblioteki.
   -->
   <script src="https://unpkg.com/@mmote/niimbluelib@0.0.1-alpha.44/dist/umd/niimbluelib.min.js"></script>
 
-  <!-- QRCode.js — tylko do generowania QR w przeglądarce -->
+  <!-- QRCode.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <style>
     :root {
-      --bg:#111827; --panel:#1f2937; --panel2:#111827; --line:#374151;
-      --text:#f3f4f6; --muted:#9ca3af; --ok:#22c55e; --bad:#ef4444;
-      --warn:#f59e0b; --blue:#3b82f6;
+      --bg:#111827;
+      --panel:#1f2937;
+      --panel2:#111827;
+      --line:#374151;
+      --text:#f3f4f6;
+      --muted:#9ca3af;
+      --ok:#22c55e;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+      --blue:#3b82f6;
     }
-    * { box-sizing:border-box; }
+
+    * {
+      box-sizing:border-box;
+    }
+
     body {
-      margin:0; background:var(--bg); color:var(--text);
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
       font-family:Arial,Helvetica,sans-serif;
     }
-    .wrap { max-width:1400px; margin:0 auto; padding:20px; }
-    h1 { margin:0 0 18px; font-size:28px; }
+
+    .wrap {
+      max-width:1400px;
+      margin:0 auto;
+      padding:20px;
+    }
+
+    h1 {
+      margin:0 0 18px;
+      font-size:28px;
+    }
+
     .grid {
-      display:grid; grid-template-columns:380px 1fr;
-      gap:18px; align-items:start;
+      display:grid;
+      grid-template-columns:380px 1fr;
+      gap:18px;
+      align-items:start;
     }
+
     .panel {
-      background:var(--panel); border:1px solid var(--line);
-      border-radius:12px; padding:16px;
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:16px;
     }
-    .panel h2 { margin:0 0 12px; font-size:18px; }
-    label { display:block; margin:10px 0 5px; color:var(--muted); font-size:13px; }
-    input, select {
-      width:100%; padding:10px; border-radius:8px;
-      border:1px solid var(--line); background:#0b1220; color:var(--text);
+
+    .panel h2 {
+      margin:0 0 12px;
+      font-size:18px;
     }
+
+    label {
+      display:block;
+      margin:10px 0 5px;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    input,
+    select {
+      width:100%;
+      padding:10px;
+      border-radius:8px;
+      border:1px solid var(--line);
+      background:#0b1220;
+      color:var(--text);
+    }
+
     button {
-      border:0; border-radius:8px; padding:11px 14px;
-      cursor:pointer; color:white; background:var(--blue);
-      font-weight:bold; margin:4px 3px 4px 0;
+      border:0;
+      border-radius:8px;
+      padding:11px 14px;
+      cursor:pointer;
+      color:white;
+      background:var(--blue);
+      font-weight:bold;
+      margin:4px 3px 4px 0;
     }
-    button:disabled { opacity:.45; cursor:not-allowed; }
-    button.secondary { background:#4b5563; }
-    button.good { background:#15803d; }
-    button.warn { background:#b45309; }
-    button.danger { background:#b91c1c; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; }
+
+    button:disabled {
+      opacity:.45;
+      cursor:not-allowed;
+    }
+
+    button.secondary {
+      background:#4b5563;
+    }
+
+    button.good {
+      background:#15803d;
+    }
+
+    button.warn {
+      background:#b45309;
+    }
+
+    button.danger {
+      background:#b91c1c;
+    }
+
+    .row {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+
     .status {
-      padding:10px 12px; border-radius:8px; background:#0b1220;
-      border:1px solid var(--line); margin-bottom:10px;
+      padding:10px 12px;
+      border-radius:8px;
+      background:#0b1220;
+      border:1px solid var(--line);
+      margin-bottom:10px;
       font-weight:bold;
     }
-    .status.ok { border-color:var(--ok); color:#bbf7d0; }
-    .status.bad { border-color:var(--bad); color:#fecaca; }
-    .status.warn { border-color:var(--warn); color:#fde68a; }
-    .data {
-      display:grid; grid-template-columns:130px 1fr; gap:7px 12px;
-      font-family:monospace; font-size:14px;
+
+    .status.ok {
+      border-color:var(--ok);
+      color:#bbf7d0;
     }
-    .data div:nth-child(odd) { color:var(--muted); }
+
+    .status.bad {
+      border-color:var(--bad);
+      color:#fecaca;
+    }
+
+    .status.warn {
+      border-color:var(--warn);
+      color:#fde68a;
+    }
+
+    .data {
+      display:grid;
+      grid-template-columns:130px 1fr;
+      gap:7px 12px;
+      font-family:monospace;
+      font-size:14px;
+    }
+
+    .data div:nth-child(odd) {
+      color:var(--muted);
+    }
+
     #labelPreview {
       width:min(100%, 1000px);
       image-rendering:auto;
@@ -74,29 +168,66 @@
       display:block;
       margin:0 auto;
     }
-    .previewBox { background:#fff; padding:12px; border-radius:10px; }
-    #qrScratch { display:none; }
+
+    .previewBox {
+      background:#fff;
+      padding:12px;
+      border-radius:10px;
+    }
+
+    #qrScratch {
+      display:none;
+    }
+
     #log {
-      width:100%; height:420px; resize:vertical;
-      background:#050a12; color:#d1fae5; border:1px solid #334155;
-      border-radius:8px; padding:12px; font:12px/1.45 Consolas,monospace;
-      white-space:pre; overflow:auto;
+      width:100%;
+      height:420px;
+      resize:vertical;
+      background:#050a12;
+      color:#d1fae5;
+      border:1px solid #334155;
+      border-radius:8px;
+      padding:12px;
+      font:12px/1.45 Consolas,monospace;
+      white-space:pre;
+      overflow:auto;
     }
-    .small { color:var(--muted); font-size:12px; line-height:1.45; }
+
+    .small {
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+    }
+
     .pill {
-      display:inline-block; padding:4px 8px; border-radius:999px;
-      background:#374151; font-size:12px; margin:2px;
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#374151;
+      font-size:12px;
+      margin:2px;
     }
-    .dangerText { color:#fca5a5; }
-    .okText { color:#86efac; }
+
+    .dangerText {
+      color:#fca5a5;
+    }
+
+    .okText {
+      color:#86efac;
+    }
+
     @media(max-width:900px) {
-      .grid { grid-template-columns:1fr; }
+      .grid {
+        grid-template-columns:1fr;
+      }
     }
   </style>
 </head>
 
 <body>
+
 <div class="wrap">
+
   <h1>🚍 ButelkoBus — panel drukowania</h1>
 
   <div id="globalStatus" class="status warn">
@@ -105,106 +236,310 @@
 
   <div class="grid">
 
+    <!-- LEWA KOLUMNA -->
+
     <div>
+
+      <!-- =====================================================
+           GOOGLE SHEETS / APPS SCRIPT
+           ===================================================== -->
+
       <div class="panel">
+
         <h2>1. Google Sheets / Apps Script</h2>
 
         <label>URL Web App Apps Script</label>
-        <input id="apiUrl" type="text"
-          placeholder="https://script.google.com/macros/s/.../exec">
+
+        <input
+          id="apiUrl"
+          type="text"
+          placeholder="https://script.google.com/macros/s/.../exec"
+        >
 
         <label>Tajny klucz</label>
-        <input id="apiKey" type="password" autocomplete="off">
+
+        <input
+          id="apiKey"
+          type="password"
+          autocomplete="off"
+        >
 
         <div class="row" style="margin-top:8px">
-          <button id="saveApi">Zapisz ustawienia</button>
-          <button id="loadReceipt" class="good">Pobierz ostatni paragon</button>
+
+          <button id="saveApi">
+            Zapisz ustawienia
+          </button>
+
+          <button id="loadReceipt" class="good">
+            Pobierz ostatni paragon
+          </button>
+
         </div>
 
         <div id="receiptData" style="margin-top:14px">
-          <div class="small">Brak pobranych danych.</div>
+
+          <div class="small">
+            Brak pobranych danych.
+          </div>
+
         </div>
+
       </div>
 
+
+      <!-- =====================================================
+           NIIMBOT
+           ===================================================== -->
+
       <div class="panel" style="margin-top:18px">
+
         <h2>2. NIIMBOT B3S_P</h2>
 
         <div class="row">
-          <button id="connectBtn" class="good">🔵 Połącz Bluetooth</button>
-          <button id="disconnectBtn" class="secondary" disabled>Rozłącz</button>
+
+          <button id="connectBtn" class="good">
+            🔵 Połącz Bluetooth
+          </button>
+
+          <button
+            id="disconnectBtn"
+            class="secondary"
+            disabled
+          >
+            Rozłącz
+          </button>
+
         </div>
+
 
         <label>Print task</label>
+
         <select id="taskSelect">
-          <option value="B1">B1</option>
-          <option value="B21_V1">B21_V1</option>
+
+          <option value="B1">
+            B1
+          </option>
+
+          <option value="B21_V1">
+            B21_V1
+          </option>
+
         </select>
+
 
         <label>Kierunek obrazu</label>
+
         <select id="direction">
-          <option value="top" selected>top — poziomo</option>
-          <option value="left">left — obrót 90°</option>
+
+          <!-- DOMYŚLNIE POZIOMO -->
+          <option
+            value="top"
+            selected
+          >
+            top — poziomo / bez obrotu
+          </option>
+
+          <option value="left">
+            left — obrót 90°
+          </option>
+
         </select>
+
 
         <label>Gęstość</label>
+
         <select id="density">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
+
+          <option value="1">
+            1
+          </option>
+
+          <option value="2">
+            2
+          </option>
+
+          <option
+            value="3"
+            selected
+          >
+            3
+          </option>
+
+          <option value="4">
+            4
+          </option>
+
+          <option value="5">
+            5
+          </option>
+
+          <option value="6">
+            6
+          </option>
+
         </select>
 
-        <label>Liczba kopii</label>
-        <input id="copies" type="number" min="1" max="20" value="1">
 
-        <div class="row" style="margin-top:8px">
-          <button id="printerInfoBtn" class="secondary" disabled>Informacje drukarki</button>
-          <button id="testPrintBtn" class="warn" disabled>🧪 Test drukarki</button>
-          <button id="printBtn" class="good" disabled>🖨️ Drukuj etykietę</button>
+        <label>Liczba kopii</label>
+
+        <input
+          id="copies"
+          type="number"
+          min="1"
+          max="20"
+          value="1"
+        >
+
+
+        <div
+          class="row"
+          style="margin-top:8px"
+        >
+
+          <button
+            id="printerInfoBtn"
+            class="secondary"
+            disabled
+          >
+            Informacje drukarki
+          </button>
+
+          <button
+            id="testPrintBtn"
+            class="warn"
+            disabled
+          >
+            🧪 Test drukarki
+          </button>
+
+          <button
+            id="printBtn"
+            class="good"
+            disabled
+          >
+            🖨️ Drukuj etykietę
+          </button>
+
         </div>
 
-        <div id="printerInfo" class="small" style="margin-top:12px">
+
+        <div
+          id="printerInfo"
+          class="small"
+          style="margin-top:12px"
+        >
           Drukarka niepołączona.
         </div>
+
       </div>
 
-      <div class="panel" style="margin-top:18px">
-        <h2>3. Diagnostyka</h2>
+
+      <!-- =====================================================
+           LOGI
+           ===================================================== -->
+
+      <div
+        class="panel"
+        style="margin-top:18px"
+      >
+
+        <h2>
+          3. Diagnostyka
+        </h2>
+
         <div class="small">
-          Log pokazuje również surowe pakiety BLE wysyłane i odbierane przez NiimBlueLib.
-          Jeżeli drukarka odrzuci zadanie, tutaj będzie wiadomo na którym etapie.
+
+          Log pokazuje również informacje o komunikacji
+          z NIIMBOT oraz błędy biblioteki.
+
+          Jeżeli drukarka odrzuci zadanie,
+          tutaj będzie wiadomo na którym etapie.
+
         </div>
-        <div class="row" style="margin-top:8px">
-          <button id="clearLog" class="secondary">Wyczyść log</button>
-          <button id="copyLog" class="secondary">Kopiuj log</button>
+
+
+        <div
+          class="row"
+          style="margin-top:8px"
+        >
+
+          <button
+            id="clearLog"
+            class="secondary"
+          >
+            Wyczyść log
+          </button>
+
+          <button
+            id="copyLog"
+            class="secondary"
+          >
+            Kopiuj log
+          </button>
+
         </div>
-        <textarea id="log" readonly></textarea>
+
+
+        <textarea
+          id="log"
+          readonly
+        ></textarea>
+
       </div>
+
     </div>
 
+
+    <!-- PRAWA KOLUMNA -->
+
     <div>
+
       <div class="panel">
-        <h2>Podgląd etykiety — 586 × 240 px</h2>
+
+        <h2>
+          Podgląd etykiety — 586 × 240 px
+        </h2>
+
         <div class="previewBox">
-          <canvas id="labelPreview" width="586" height="240"></canvas>
+
+          <canvas
+            id="labelPreview"
+            width="586"
+            height="240"
+          ></canvas>
+
         </div>
-        <div style="margin-top:10px" class="small">
-          Fizyczna rozdzielczość głowicy Twojego B3S_P: 586 punktów.
-          Jeżeli test wydrukuje się poprawnie, ten sam mechanizm zostanie użyty
-          do właściwej etykiety.
+
+        <div
+          style="margin-top:10px"
+          class="small"
+        >
+
+          Fizyczna rozdzielczość głowicy Twojego
+          B3S_P: 586 punktów.
+
+          QR zawiera ID paragonu.
+
         </div>
+
       </div>
+
     </div>
 
   </div>
+
 </div>
+
+
+<!-- NIEWIDOCZNY ELEMENT DO QR -->
 
 <div id="qrScratch"></div>
 
+
 <script>
+
 "use strict";
+
 
 /* ============================================================
    KONFIGURACJA
@@ -213,837 +548,2482 @@
 const DEFAULT_API_URL =
   "https://script.google.com/macros/s/AKfycbxSunUNAlVM9U5XLfTeQEgefpzRa9t0GW6LO0OPdB-zkCZgFSP5em6-bOlBKMqomIGN/exec";
 
+
 const STORAGE_URL = "bb_url";
+
 const STORAGE_KEY = "bb_key";
 
+
 const LABEL_W = 586;
+
 const LABEL_H = 240;
+
 
 /* ============================================================
    STAN
    ============================================================ */
 
 let client = null;
-let currentReceipt = null;
-let labelCanvas = document.getElementById("labelPreview");
 
-const $ = id => document.getElementById(id);
+let currentReceipt = null;
+
+let labelCanvas =
+  document.getElementById("labelPreview");
+
+
+const $ = id =>
+  document.getElementById(id);
+
 
 /* ============================================================
    LOGOWANIE
    ============================================================ */
 
 function nowTime() {
-  return new Date().toLocaleTimeString("pl-PL", {hour12:false});
+
+  return new Date().toLocaleTimeString(
+    "pl-PL",
+    {
+      hour12:false
+    }
+  );
+
 }
+
 
 function safeString(value) {
+
   try {
-    if (typeof value === "string") return value;
-    return JSON.stringify(value, null, 2);
+
+    if (typeof value === "string") {
+      return value;
+    }
+
+    return JSON.stringify(
+      value,
+      null,
+      2
+    );
+
   } catch (_) {
+
     return String(value);
+
   }
+
 }
+
 
 function log(message, data) {
-  const line = `[${nowTime()}] ${message}`;
-  console.log(line, data ?? "");
+
+  const line =
+    `[${nowTime()}] ${message}`;
+
+  console.log(
+    line,
+    data ?? ""
+  );
+
 
   let extra = "";
+
   if (data !== undefined) {
-    extra = " " + safeString(data);
+
+    extra =
+      " " +
+      safeString(data);
+
   }
+
 
   const box = $("log");
-  box.value += line + extra + "\n";
-  box.scrollTop = box.scrollHeight;
+
+  box.value +=
+    line +
+    extra +
+    "\n";
+
+  box.scrollTop =
+    box.scrollHeight;
+
 }
+
 
 function logError(prefix, error) {
-  console.error(prefix, error);
+
+  console.error(
+    prefix,
+    error
+  );
+
 
   let text = "";
+
+
   if (error instanceof Error) {
-    text = `${error.name}: ${error.message}`;
-    if (error.stack) text += "\n" + error.stack;
+
+    text =
+      `${error.name}: ${error.message}`;
+
+    if (error.stack) {
+
+      text +=
+        "\n" +
+        error.stack;
+
+    }
+
   } else {
-    text = safeString(error);
+
+    text =
+      safeString(error);
+
   }
 
-  log("❌ " + prefix, text);
-  setGlobalStatus("BŁĄD — zobacz log", "bad");
+
+  log(
+    "❌ " + prefix,
+    text
+  );
+
+
+  setGlobalStatus(
+    "BŁĄD — zobacz log",
+    "bad"
+  );
+
 }
 
-function setGlobalStatus(text, type="warn") {
-  const el = $("globalStatus");
-  el.textContent = text;
-  el.className = "status " + type;
+
+function setGlobalStatus(
+  text,
+  type="warn"
+) {
+
+  const el =
+    $("globalStatus");
+
+  el.textContent =
+    text;
+
+  el.className =
+    "status " +
+    type;
+
 }
+
 
 /* ============================================================
-   OBSŁUGA WYJĄTKÓW GLOBALNYCH
+   GLOBALNE BŁĘDY
    ============================================================ */
 
-window.addEventListener("error", e => {
-  log("❌ window.error", {
-    message: e.message,
-    filename: e.filename,
-    line: e.lineno,
-    column: e.colno
-  });
-});
+window.addEventListener(
+  "error",
+  e => {
 
-window.addEventListener("unhandledrejection", e => {
-  logError("Nieobsłużony Promise rejection", e.reason);
-});
+    log(
+      "❌ window.error",
+      {
+        message:e.message,
+        filename:e.filename,
+        line:e.lineno,
+        column:e.colno
+      }
+    );
+
+  }
+);
+
+
+window.addEventListener(
+  "unhandledrejection",
+  e => {
+
+    logError(
+      "Nieobsłużony Promise rejection",
+      e.reason
+    );
+
+  }
+);
+
 
 /* ============================================================
    USTAWIENIA API
    ============================================================ */
 
 function loadSettings() {
-  $("apiUrl").value = localStorage.getItem(STORAGE_URL) || DEFAULT_API_URL;
-  $("apiKey").value = localStorage.getItem(STORAGE_KEY) || "";
-  log("Załadowano ustawienia API z localStorage.");
+
+  $("apiUrl").value =
+    localStorage.getItem(
+      STORAGE_URL
+    ) ||
+    DEFAULT_API_URL;
+
+
+  $("apiKey").value =
+    localStorage.getItem(
+      STORAGE_KEY
+    ) ||
+    "";
+
+
+  log(
+    "Załadowano ustawienia API z localStorage."
+  );
+
 }
 
+
 $("saveApi").onclick = () => {
-  const url = $("apiUrl").value.trim();
-  const key = $("apiKey").value;
+
+  const url =
+    $("apiUrl").value.trim();
+
+  const key =
+    $("apiKey").value;
+
 
   if (!url) {
-    setGlobalStatus("Brak URL Apps Script", "bad");
+
+    setGlobalStatus(
+      "Brak URL Apps Script",
+      "bad"
+    );
+
     return;
+
   }
 
-  localStorage.setItem(STORAGE_URL, url);
-  localStorage.setItem(STORAGE_KEY, key);
 
-  log("Zapisano URL i klucz API.");
-  setGlobalStatus("Ustawienia API zapisane.", "ok");
+  localStorage.setItem(
+    STORAGE_URL,
+    url
+  );
+
+
+  localStorage.setItem(
+    STORAGE_KEY,
+    key
+  );
+
+
+  log(
+    "Zapisano URL i klucz API."
+  );
+
+
+  setGlobalStatus(
+    "Ustawienia API zapisane.",
+    "ok"
+  );
+
 };
 
+
 /* ============================================================
-   JSONP DO ISTNIEJĄCEGO doGet()
-   Nie zmieniamy Apps Script.
+   JSONP — ISTNIEJĄCY doGet()
    ============================================================ */
 
 function fetchLatestReceipt() {
-  return new Promise((resolve, reject) => {
-    const url = $("apiUrl").value.trim();
-    const key = $("apiKey").value;
 
-    if (!url) {
-      reject(new Error("Brak URL Apps Script."));
-      return;
-    }
+  return new Promise(
+    (resolve, reject) => {
 
-    if (!key) {
-      reject(new Error("Brak klucza Apps Script."));
-      return;
-    }
+      const url =
+        $("apiUrl").value.trim();
 
-    const callbackName =
-      "obsluzDaneParagonu_" +
-      Date.now() + "_" +
-      Math.floor(Math.random() * 100000);
+      const key =
+        $("apiKey").value;
 
-    const script = document.createElement("script");
 
-    let finished = false;
-    const timeout = setTimeout(() => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      reject(new Error("Timeout JSONP — Apps Script nie odpowiedział w 15 s."));
-    }, 15000);
+      if (!url) {
 
-    function cleanup() {
-      clearTimeout(timeout);
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }
+        reject(
+          new Error(
+            "Brak URL Apps Script."
+          )
+        );
 
-    window[callbackName] = data => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      resolve(data);
-    };
+        return;
 
-    script.onerror = () => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      reject(new Error("Nie udało się załadować odpowiedzi JSONP z Apps Script."));
-    };
+      }
 
-    const separator = url.includes("?") ? "&" : "?";
-    script.src =
-      url +
-      separator +
-      "key=" + encodeURIComponent(key) +
-      "&callback=" + encodeURIComponent(callbackName) +
-      "&_=" + Date.now();
 
-    log("GET Apps Script JSONP:", script.src.replace(/key=[^&]+/, "key=***"));
+      if (!key) {
 
-    document.head.appendChild(script);
-  });
-}
+        reject(
+          new Error(
+            "Brak klucza Apps Script."
+          )
+        );
 
-$("loadReceipt").onclick = async () => {
-  $("loadReceipt").disabled = true;
-  setGlobalStatus("Pobieram ostatni paragon…", "warn");
+        return;
 
-  try {
-    const data = await fetchLatestReceipt();
+      }
 
-    log("Odpowiedź Apps Script:", data);
 
-    if (!data || data.status !== "ok") {
-      throw new Error(
-        "Apps Script zwrócił status: " +
-        (data ? safeString(data) : "brak danych")
-      );
-    }
+      const callbackName =
+        "obsluzDaneParagonu_" +
+        Date.now() +
+        "_" +
+        Math.floor(
+          Math.random() * 100000
+        );
 
-    currentReceipt = {
-      customId: String(data.customId || ""),
-      date: String(data.date || ""),
-      note: String(data.note || "")
-    };
 
-    $("receiptData").innerHTML = `
-      <div class="data">
-        <div>ID paragonu</div><div>${escapeHtml(currentReceipt.customId)}</div>
-        <div>Data</div><div>${escapeHtml(currentReceipt.date)}</div>
-        <div>Kod / note</div><div>${escapeHtml(currentReceipt.note || "Brak")}</div>
-      </div>
-    `;
+      const script =
+        document.createElement(
+          "script"
+        );
 
-    drawLabel(currentReceipt);
 
-    setGlobalStatus("Dane pobrane i etykieta gotowa.", "ok");
-    log("✅ Paragon pobrany poprawnie.");
-  } catch (e) {
-    logError("Pobieranie paragonu", e);
-  } finally {
-    $("loadReceipt").disabled = false;
-  }
-};
+      let finished = false;
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
-/* ============================================================
-   ETYKIETA
-   ============================================================ */
+      const timeout =
+        setTimeout(
+          () => {
 
-async function makeQrDataUrl(text) {
-  const holder = $("qrScratch");
-  holder.innerHTML = "";
+            if (finished) {
+              return;
+            }
 
-  return new Promise((resolve, reject) => {
-    if (!window.QRCode) {
-      reject(new Error("Biblioteka QRCode.js nie została załadowana."));
-      return;
-    }
+            finished = true;
 
-    try {
-      new QRCode(holder, {
-        text: String(text || ""),
-        width: 180,
-        height: 180,
-        correctLevel: QRCode.CorrectLevel.M
-      });
+            cleanup();
 
-      setTimeout(() => {
-        const qrCanvas = holder.querySelector("canvas");
-        if (!qrCanvas) {
-          reject(new Error("QRCode.js nie utworzył canvasa."));
+
+            reject(
+              new Error(
+                "Timeout JSONP — Apps Script nie odpowiedział w 15 s."
+              )
+            );
+
+          },
+          15000
+        );
+
+
+      function cleanup() {
+
+        clearTimeout(
+          timeout
+        );
+
+
+        delete window[
+          callbackName
+        ];
+
+
+        if (
+          script.parentNode
+        ) {
+
+          script.parentNode.removeChild(
+            script
+          );
+
+        }
+
+      }
+
+
+      window[callbackName] =
+        data => {
+
+          if (finished) {
+            return;
+          }
+
+          finished = true;
+
+          cleanup();
+
+          resolve(data);
+
+        };
+
+
+      script.onerror = () => {
+
+        if (finished) {
           return;
         }
-        resolve(qrCanvas.toDataURL("image/png"));
-      }, 50);
-    } catch (e) {
-      reject(e);
+
+        finished = true;
+
+        cleanup();
+
+
+        reject(
+          new Error(
+            "Nie udało się załadować odpowiedzi JSONP z Apps Script."
+          )
+        );
+
+      };
+
+
+      const separator =
+        url.includes("?")
+          ? "&"
+          : "?";
+
+
+      script.src =
+        url +
+        separator +
+        "key=" +
+        encodeURIComponent(key) +
+        "&callback=" +
+        encodeURIComponent(
+          callbackName
+        ) +
+        "&_=" +
+        Date.now();
+
+
+      log(
+        "GET Apps Script JSONP:",
+        script.src.replace(
+          /key=[^&]+/,
+          "key=***"
+        )
+      );
+
+
+      document.head.appendChild(
+        script
+      );
+
     }
-  });
+  );
+
 }
 
-async function drawLabel(receipt) {
-  const ctx = labelCanvas.getContext("2d");
 
-  ctx.clearRect(0, 0, LABEL_W, LABEL_H);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, LABEL_W, LABEL_H);
+$("loadReceipt").onclick =
+  async () => {
 
-  ctx.fillStyle = "#000000";
-  ctx.strokeStyle = "#000000";
+    $("loadReceipt").disabled =
+      true;
 
-  /* Ramka */
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, LABEL_W - 2, LABEL_H - 2);
 
-  /* QR */
-  try {
-    const qrData = await makeQrDataUrl(receipt.note || receipt.customId);
+    setGlobalStatus(
+      "Pobieram ostatni paragon…",
+      "warn"
+    );
 
-    await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 20, 30, 180, 180);
-        resolve();
+
+    try {
+
+      const data =
+        await fetchLatestReceipt();
+
+
+      log(
+        "Odpowiedź Apps Script:",
+        data
+      );
+
+
+      if (
+        !data ||
+        data.status !== "ok"
+      ) {
+
+        throw new Error(
+          "Apps Script zwrócił status: " +
+          (
+            data
+              ? safeString(data)
+              : "brak danych"
+          )
+        );
+
+      }
+
+
+      currentReceipt = {
+
+        customId:
+          String(
+            data.customId ||
+            ""
+          ),
+
+        date:
+          String(
+            data.date ||
+            ""
+          ),
+
+        note:
+          String(
+            data.note ||
+            ""
+          )
+
       };
-      img.onerror = reject;
-      img.src = qrData;
-    });
+
+
+      $("receiptData").innerHTML = `
+
+        <div class="data">
+
+          <div>ID paragonu</div>
+
+          <div>
+            ${escapeHtml(
+              currentReceipt.customId
+            )}
+          </div>
+
+
+          <div>Data</div>
+
+          <div>
+            ${escapeHtml(
+              currentReceipt.date
+            )}
+          </div>
+
+
+          <div>Kod / note</div>
+
+          <div>
+            ${escapeHtml(
+              currentReceipt.note ||
+              "Brak"
+            )}
+          </div>
+
+        </div>
+
+      `;
+
+
+      await drawLabel(
+        currentReceipt
+      );
+
+
+      setGlobalStatus(
+        "Dane pobrane i etykieta gotowa.",
+        "ok"
+      );
+
+
+      log(
+        "✅ Paragon pobrany poprawnie."
+      );
+
+    } catch (e) {
+
+      logError(
+        "Pobieranie paragonu",
+        e
+      );
+
+    } finally {
+
+      $("loadReceipt").disabled =
+        false;
+
+    }
+
+  };
+
+
+function escapeHtml(value) {
+
+  return String(value)
+
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
+
+}
+
+
+/* ============================================================
+   QR
+   WAŻNE:
+   QR = ID PARAGONU
+   NIE = kod worka
+   ============================================================ */
+
+async function makeQrDataUrl(
+  text
+) {
+
+  const holder =
+    $("qrScratch");
+
+
+  holder.innerHTML =
+    "";
+
+
+  return new Promise(
+    (resolve, reject) => {
+
+      if (!window.QRCode) {
+
+        reject(
+          new Error(
+            "Biblioteka QRCode.js nie została załadowana."
+          )
+        );
+
+        return;
+
+      }
+
+
+      try {
+
+        new QRCode(
+          holder,
+          {
+
+            text:
+              String(
+                text || ""
+              ),
+
+            width:180,
+
+            height:180,
+
+            correctLevel:
+              QRCode.CorrectLevel.M
+
+          }
+        );
+
+
+        setTimeout(
+          () => {
+
+            const qrCanvas =
+              holder.querySelector(
+                "canvas"
+              );
+
+
+            if (!qrCanvas) {
+
+              reject(
+                new Error(
+                  "QRCode.js nie utworzył canvasa."
+                )
+              );
+
+              return;
+
+            }
+
+
+            resolve(
+              qrCanvas.toDataURL(
+                "image/png"
+              )
+            );
+
+          },
+          50
+        );
+
+
+      } catch (e) {
+
+        reject(e);
+
+      }
+
+    }
+  );
+
+}
+
+
+/* ============================================================
+   RYSOWANIE ETYKIETY
+   ============================================================ */
+
+async function drawLabel(
+  receipt
+) {
+
+  const ctx =
+    labelCanvas.getContext(
+      "2d"
+    );
+
+
+  ctx.clearRect(
+    0,
+    0,
+    LABEL_W,
+    LABEL_H
+  );
+
+
+  ctx.fillStyle =
+    "#ffffff";
+
+
+  ctx.fillRect(
+    0,
+    0,
+    LABEL_W,
+    LABEL_H
+  );
+
+
+  ctx.fillStyle =
+    "#000000";
+
+
+  ctx.strokeStyle =
+    "#000000";
+
+
+  /* RAMKA */
+
+  ctx.lineWidth =
+    2;
+
+
+  ctx.strokeRect(
+    1,
+    1,
+    LABEL_W - 2,
+    LABEL_H - 2
+  );
+
+
+  /* ========================================================
+     QR — TUTAJ JEST ID PARAGONU
+     ======================================================== */
+
+  try {
+
+    const qrData =
+      await makeQrDataUrl(
+        receipt.customId
+      );
+
+
+    await new Promise(
+      (resolve, reject) => {
+
+        const img =
+          new Image();
+
+
+        img.onload =
+          () => {
+
+            ctx.drawImage(
+              img,
+              20,
+              30,
+              180,
+              180
+            );
+
+            resolve();
+
+          };
+
+
+        img.onerror =
+          reject;
+
+
+        img.src =
+          qrData;
+
+      }
+    );
+
 
   } catch (e) {
-    logError("Generowanie QR", e);
-    ctx.font = "bold 18px Arial";
-    ctx.fillText("QR ERROR", 40, 120);
+
+    logError(
+      "Generowanie QR",
+      e
+    );
+
+
+    ctx.font =
+      "bold 18px Arial";
+
+
+    ctx.fillText(
+      "QR ERROR",
+      40,
+      120
+    );
+
   }
 
-  /* Tekst */
-  ctx.fillStyle = "#000";
-  ctx.textAlign = "left";
 
-  ctx.font = "bold 34px Arial";
-  ctx.fillText("BUTELKOBUS", 225, 55);
+  /* ========================================================
+     TEKST
+     ======================================================== */
 
-  ctx.font = "bold 18px Arial";
-  ctx.fillText("Data odbioru:", 225, 88);
+  ctx.fillStyle =
+    "#000";
 
-  ctx.font = "18px Arial";
-  ctx.fillText(fitText(receipt.date, 335), 225, 112);
 
-  ctx.font = "bold 18px Arial";
-  ctx.fillText("Kod worka:", 225, 145);
+  ctx.textAlign =
+    "left";
 
-  ctx.font = "bold 26px Arial";
-  ctx.fillText(fitText(receipt.note || "BRAK", 320), 225, 174);
 
-  ctx.font = "bold 16px Arial";
-  ctx.fillText("ID PARAGONU:", 225, 202);
+  ctx.font =
+    "bold 34px Arial";
 
-  ctx.font = "16px Arial";
-  ctx.fillText(fitText(receipt.customId, 330), 225, 224);
 
-  log(`Etykieta narysowana: ${LABEL_W}×${LABEL_H}px.`);
+  ctx.fillText(
+    "BUTELKOBUS",
+    225,
+    55
+  );
+
+
+  ctx.font =
+    "bold 18px Arial";
+
+
+  ctx.fillText(
+    "Data odbioru:",
+    225,
+    88
+  );
+
+
+  ctx.font =
+    "18px Arial";
+
+
+  ctx.fillText(
+    fitText(
+      receipt.date,
+      335
+    ),
+    225,
+    112
+  );
+
+
+  ctx.font =
+    "bold 18px Arial";
+
+
+  ctx.fillText(
+    "Kod worka:",
+    225,
+    145
+  );
+
+
+  ctx.font =
+    "bold 26px Arial";
+
+
+  ctx.fillText(
+    fitText(
+      receipt.note ||
+      "BRAK",
+      320
+    ),
+    225,
+    174
+  );
+
+
+  ctx.font =
+    "bold 16px Arial";
+
+
+  ctx.fillText(
+    "ID PARAGONU:",
+    225,
+    202
+  );
+
+
+  ctx.font =
+    "16px Arial";
+
+
+  ctx.fillText(
+    fitText(
+      receipt.customId,
+      330
+    ),
+    225,
+    224
+  );
+
+
+  log(
+    `Etykieta narysowana: ${LABEL_W}×${LABEL_H}px.`
+  );
+
+
+  log(
+    "QR zawiera ID paragonu:",
+    receipt.customId
+  );
+
 }
 
-function fitText(text, maxWidth) {
-  const ctx = labelCanvas.getContext("2d");
-  let s = String(text || "");
-  while (ctx.measureText(s).width > maxWidth && s.length > 3) {
-    s = s.slice(0, -1);
+
+function fitText(
+  text,
+  maxWidth
+) {
+
+  const ctx =
+    labelCanvas.getContext(
+      "2d"
+    );
+
+
+  let s =
+    String(
+      text || ""
+    );
+
+
+  while (
+    ctx.measureText(s).width >
+      maxWidth &&
+    s.length > 3
+  ) {
+
+    s =
+      s.slice(
+        0,
+        -1
+      );
+
   }
-  if (s !== String(text || "")) s += "…";
+
+
+  if (
+    s !==
+    String(
+      text || ""
+    )
+  ) {
+
+    s += "…";
+
+  }
+
+
   return s;
+
 }
+
 
 /* ============================================================
    NIIMBLUELIB
    ============================================================ */
 
 function libraryCheck() {
-  if (!window.niimbluelib) {
+
+  if (
+    !window.niimbluelib
+  ) {
+
     throw new Error(
       "NiimBlueLib nie jest załadowany. Sprawdź internet/CDN oraz DevTools → Console."
     );
+
   }
 
-  log("NiimBlueLib załadowany.", {
-    keys: Object.keys(window.niimbluelib).sort()
-  });
 
-  if (!window.niimbluelib.NiimbotBluetoothClient) {
-    throw new Error("Brak NiimbotBluetoothClient w niimbluelib.");
-  }
-
-  if (!window.niimbluelib.ImageEncoder) {
-    throw new Error("Brak ImageEncoder w niimbluelib.");
-  }
-}
-
-function attachClientLogs(c) {
-  if (!c || !c.on) {
-    log("⚠️ client.on() niedostępne — biblioteka ma inne API zdarzeń.");
-    return;
-  }
-
-  c.on("packetsent", e => {
-    try {
-      const hex = window.niimbluelib.Utils?.bufToHex
-        ? window.niimbluelib.Utils.bufToHex(e.packet.toBytes())
-        : e.packet.toBytes();
-      const map = window.niimbluelib.RequestCommandId || {};
-      log("BLE >> " + hex + " [" + (map[e.packet.command] ?? e.packet.command) + "]");
-    } catch (err) {
-      logError("Log pakietu packetsent", err);
+  log(
+    "NiimBlueLib załadowany.",
+    {
+      keys:
+        Object.keys(
+          window.niimbluelib
+        ).sort()
     }
-  });
+  );
 
-  c.on("packetreceived", e => {
-    try {
-      const hex = window.niimbluelib.Utils?.bufToHex
-        ? window.niimbluelib.Utils.bufToHex(e.packet.toBytes())
-        : e.packet.toBytes();
-      const map = window.niimbluelib.ResponseCommandId || {};
-      log("BLE << " + hex + " [" + (map[e.packet.command] ?? e.packet.command) + "]");
-    } catch (err) {
-      logError("Log pakietu packetreceived", err);
-    }
-  });
 
-  c.on("connect", () => {
-    log("✅ EVENT: connect");
-  });
+  if (
+    !window.niimbluelib
+      .NiimbotBluetoothClient
+  ) {
 
-  c.on("disconnect", () => {
-    log("⚠️ EVENT: disconnect");
-    $("disconnectBtn").disabled = true;
-    $("connectBtn").disabled = false;
-    $("printerInfoBtn").disabled = true;
-    $("testPrintBtn").disabled = true;
-    $("printBtn").disabled = true;
-    setGlobalStatus("Drukarka rozłączona.", "warn");
-  });
-
-  c.on("printprogress", e => {
-    log(
-      `POSTĘP: strona ${e.page}/${e.pagesTotal}, ` +
-      `druk ${e.pagePrintProgress}%, ` +
-      `podawanie ${e.pageFeedProgress}%`
+    throw new Error(
+      "Brak NiimbotBluetoothClient w niimbluelib."
     );
-  });
+
+  }
+
+
+  if (
+    !window.niimbluelib
+      .ImageEncoder
+  ) {
+
+    throw new Error(
+      "Brak ImageEncoder w niimbluelib."
+    );
+
+  }
+
 }
+
+
+/* ============================================================
+   KLIENT BLE
+   ============================================================ */
+
+function attachClientLogs(
+  c
+) {
+
+  if (
+    !c ||
+    !c.on
+  ) {
+
+    log(
+      "⚠️ client.on() niedostępne — biblioteka ma inne API zdarzeń."
+    );
+
+    return;
+
+  }
+
+
+  c.on(
+    "packetsent",
+    e => {
+
+      try {
+
+        const hex =
+          window.niimbluelib
+            .Utils?.bufToHex
+            ? window.niimbluelib
+                .Utils
+                .bufToHex(
+                  e.packet.toBytes()
+                )
+            : e.packet.toBytes();
+
+
+        const map =
+          window.niimbluelib
+            .RequestCommandId ||
+          {};
+
+
+        log(
+          "BLE >> " +
+          hex +
+          " [" +
+          (
+            map[
+              e.packet.command
+            ] ??
+            e.packet.command
+          ) +
+          "]"
+        );
+
+      } catch (err) {
+
+        logError(
+          "Log pakietu packetsent",
+          err
+        );
+
+      }
+
+    }
+  );
+
+
+  c.on(
+    "packetreceived",
+    e => {
+
+      try {
+
+        const hex =
+          window.niimbluelib
+            .Utils?.bufToHex
+            ? window.niimbluelib
+                .Utils
+                .bufToHex(
+                  e.packet.toBytes()
+                )
+            : e.packet.toBytes();
+
+
+        const map =
+          window.niimbluelib
+            .ResponseCommandId ||
+          {};
+
+
+        log(
+          "BLE << " +
+          hex +
+          " [" +
+          (
+            map[
+              e.packet.command
+            ] ??
+            e.packet.command
+          ) +
+          "]"
+        );
+
+      } catch (err) {
+
+        logError(
+          "Log pakietu packetreceived",
+          err
+        );
+
+      }
+
+    }
+  );
+
+
+  c.on(
+    "connect",
+    () => {
+
+      log(
+        "✅ EVENT: connect"
+      );
+
+    }
+  );
+
+
+  c.on(
+    "disconnect",
+    () => {
+
+      log(
+        "⚠️ EVENT: disconnect"
+      );
+
+
+      $("disconnectBtn")
+        .disabled = true;
+
+
+      $("connectBtn")
+        .disabled = false;
+
+
+      $("printerInfoBtn")
+        .disabled = true;
+
+
+      $("testPrintBtn")
+        .disabled = true;
+
+
+      $("printBtn")
+        .disabled = true;
+
+
+      setGlobalStatus(
+        "Drukarka rozłączona.",
+        "warn"
+      );
+
+    }
+  );
+
+
+  c.on(
+    "printprogress",
+    e => {
+
+      log(
+        `POSTĘP: strona ${e.page}/${e.pagesTotal}, ` +
+        `druk ${e.pagePrintProgress}%, ` +
+        `podawanie ${e.pageFeedProgress}%`
+      );
+
+    }
+  );
+
+}
+
+
+/* ============================================================
+   POŁĄCZENIE Z DRUKARKĄ
+   ============================================================ */
 
 async function connectPrinter() {
+
   libraryCheck();
 
+
   if (client) {
-    try { await client.disconnect(); } catch (_) {}
-    client = null;
+
+    try {
+
+      await client.disconnect();
+
+    } catch (_) {}
+
+    client =
+      null;
+
   }
 
-  log("Tworzę NiimbotBluetoothClient…");
-  client = new window.niimbluelib.NiimbotBluetoothClient();
 
-  attachClientLogs(client);
+  log(
+    "Tworzę NiimbotBluetoothClient…"
+  );
 
-  setGlobalStatus("Czekam na wybór drukarki Bluetooth…", "warn");
+
+  client =
+    new window
+      .niimbluelib
+      .NiimbotBluetoothClient();
+
+
+  attachClientLogs(
+    client
+  );
+
+
+  setGlobalStatus(
+    "Czekam na wybór drukarki Bluetooth…",
+    "warn"
+  );
+
 
   try {
+
     await client.connect();
 
-    log("✅ client.connect() zakończone.");
 
-    let task = null;
+    log(
+      "✅ client.connect() zakończone."
+    );
+
+
+    let task =
+      null;
+
+
     try {
-      task = client.getPrintTaskType?.();
+
+      task =
+        client.getPrintTaskType?.();
+
     } catch (e) {
-      logError("getPrintTaskType()", e);
+
+      logError(
+        "getPrintTaskType()",
+        e
+      );
+
     }
 
-    log("Wykryty Print Task:", task || "brak automatycznej detekcji");
+
+    log(
+      "Wykryty Print Task:",
+      task ||
+      "brak automatycznej detekcji"
+    );
+
 
     if (task) {
-      const select = $("taskSelect");
-      const optionExists = [...select.options].some(o => o.value === task);
+
+      const select =
+        $("taskSelect");
+
+
+      const optionExists =
+        [
+          ...select.options
+        ].some(
+          o =>
+            o.value === task
+        );
+
+
       if (!optionExists) {
-        const opt = document.createElement("option");
-        opt.value = task;
-        opt.textContent = task + " (wykryty)";
-        select.appendChild(opt);
+
+        const opt =
+          document.createElement(
+            "option"
+          );
+
+
+        opt.value =
+          task;
+
+
+        opt.textContent =
+          task +
+          " (wykryty)";
+
+
+        select.appendChild(
+          opt
+        );
+
       }
-      select.value = task;
+
+
+      select.value =
+        task;
+
     }
+
 
     await fetchPrinterInfo();
 
-    $("disconnectBtn").disabled = false;
-    $("connectBtn").disabled = true;
-    $("printerInfoBtn").disabled = false;
-    $("testPrintBtn").disabled = false;
-    $("printBtn").disabled = false;
 
-    setGlobalStatus("NIIMBOT połączony.", "ok");
+    $("disconnectBtn")
+      .disabled = false;
+
+
+    $("connectBtn")
+      .disabled = true;
+
+
+    $("printerInfoBtn")
+      .disabled = false;
+
+
+    $("testPrintBtn")
+      .disabled = false;
+
+
+    $("printBtn")
+      .disabled = false;
+
+
+    setGlobalStatus(
+      "NIIMBOT połączony.",
+      "ok"
+    );
+
+
   } catch (e) {
-    logError("Łączenie z NIIMBOT", e);
+
+    logError(
+      "Łączenie z NIIMBOT",
+      e
+    );
+
 
     try {
-      if (client) await client.disconnect();
+
+      if (client) {
+
+        await client.disconnect();
+
+      }
+
     } catch (_) {}
 
-    client = null;
-    $("disconnectBtn").disabled = true;
-    $("connectBtn").disabled = false;
+
+    client =
+      null;
+
+
+    $("disconnectBtn")
+      .disabled = true;
+
+
+    $("connectBtn")
+      .disabled = false;
+
   }
+
 }
 
-$("connectBtn").onclick = connectPrinter;
 
-$("disconnectBtn").onclick = async () => {
-  try {
-    if (client) {
-      log("Rozłączanie…");
-      await client.disconnect();
+$("connectBtn").onclick =
+  connectPrinter;
+
+
+$("disconnectBtn").onclick =
+  async () => {
+
+    try {
+
+      if (client) {
+
+        log(
+          "Rozłączanie…"
+        );
+
+
+        await client.disconnect();
+
+      }
+
+    } catch (e) {
+
+      logError(
+        "Rozłączanie",
+        e
+      );
+
+    } finally {
+
+      client =
+        null;
+
     }
-  } catch (e) {
-    logError("Rozłączanie", e);
-  } finally {
-    client = null;
-  }
-};
+
+  };
+
 
 /* ============================================================
-   INFO DRUKARKI
+   INFORMACJE DRUKARKI
    ============================================================ */
 
 async function fetchPrinterInfo() {
-  if (!client) throw new Error("Brak połączenia z drukarką.");
 
-  log("Wywołuję fetchPrinterInfo()…");
+  if (!client) {
+
+    throw new Error(
+      "Brak połączenia z drukarką."
+    );
+
+  }
+
+
+  log(
+    "Wywołuję fetchPrinterInfo()…"
+  );
+
 
   try {
+
     await client.fetchPrinterInfo();
+
   } catch (e) {
-    logError("fetchPrinterInfo()", e);
+
+    logError(
+      "fetchPrinterInfo()",
+      e
+    );
+
   }
 
-  let info = null;
+
+  let info =
+    null;
+
 
   try {
-    info = client.getPrinterInfo?.();
+
+    info =
+      client.getPrinterInfo?.();
+
   } catch (e) {
-    logError("getPrinterInfo()", e);
+
+    logError(
+      "getPrinterInfo()",
+      e
+    );
+
   }
 
-  let task = null;
+
+  let task =
+    null;
+
+
   try {
-    task = client.getPrintTaskType?.();
+
+    task =
+      client.getPrintTaskType?.();
+
   } catch (_) {}
 
-  log("getPrinterInfo():", info);
-  log("getPrintTaskType():", task);
+
+  log(
+    "getPrinterInfo():",
+    info
+  );
+
+
+  log(
+    "getPrintTaskType():",
+    task
+  );
+
 
   $("printerInfo").innerHTML =
-    `<div><span class="pill">Połączona</span>` +
-    `<span class="pill">Task: ${escapeHtml(task || "brak")}</span></div>` +
-    `<pre style="white-space:pre-wrap">${escapeHtml(safeString(info))}</pre>`;
+
+    `<div>` +
+
+      `<span class="pill">Połączona</span>` +
+
+      `<span class="pill">Task: ${
+        escapeHtml(
+          task ||
+          "brak"
+        )
+      }</span>` +
+
+    `</div>` +
+
+    `<pre style="white-space:pre-wrap">${
+      escapeHtml(
+        safeString(info)
+      )
+    }</pre>`;
+
 
   return info;
+
 }
 
-$("printerInfoBtn").onclick = async () => {
-  try {
-    await fetchPrinterInfo();
-    setGlobalStatus("Informacje drukarki pobrane.", "ok");
-  } catch (e) {
-    logError("Informacje drukarki", e);
-  }
-};
+
+$("printerInfoBtn").onclick =
+  async () => {
+
+    try {
+
+      await fetchPrinterInfo();
+
+
+      setGlobalStatus(
+        "Informacje drukarki pobrane.",
+        "ok"
+      );
+
+    } catch (e) {
+
+      logError(
+        "Informacje drukarki",
+        e
+      );
+
+    }
+
+  };
+
 
 /* ============================================================
-   ENCODER — obsługa różnych wariantów API
+   IMAGE ENCODER
    ============================================================ */
 
-function encodeForPrinter(canvas) {
-  const lib = window.niimbluelib;
-  const Encoder = lib.ImageEncoder;
+function encodeForPrinter(
+  canvas
+) {
 
-  if (!Encoder || typeof Encoder.encodeCanvas !== "function") {
-    throw new Error("ImageEncoder.encodeCanvas() nie istnieje.");
+  const lib =
+    window.niimbluelib;
+
+
+  const Encoder =
+    lib.ImageEncoder;
+
+
+  if (
+    !Encoder ||
+    typeof Encoder.encodeCanvas !==
+      "function"
+  ) {
+
+    throw new Error(
+      "ImageEncoder.encodeCanvas() nie istnieje."
+    );
+
   }
 
-  const direction = $("direction").value;
+
+  const direction =
+    $("direction").value;
+
+
   const pageColor =
-    lib.PageColorType && lib.PageColorType.SingleColor !== undefined
-      ? lib.PageColorType.SingleColor
+    lib.PageColorType &&
+    lib.PageColorType
+      .SingleColor !==
+      undefined
+
+      ? lib.PageColorType
+          .SingleColor
+
       : 0;
 
-  log("ImageEncoder.encodeCanvas.length =", Encoder.encodeCanvas.length);
-  log("Parametry kodowania:", { direction, pageColor });
+
+  log(
+    "ImageEncoder.encodeCanvas.length =",
+    Encoder.encodeCanvas.length
+  );
+
+
+  log(
+    "Parametry kodowania:",
+    {
+      direction,
+      pageColor
+    }
+  );
+
 
   let encoded;
 
-  /*
-    W różnych wersjach NiimBlueLib API encodeCanvas miało różną sygnaturę.
-    Nie zgadujemy koloru jako drugiego argumentu.
-  */
-  if (Encoder.encodeCanvas.length >= 3) {
-    encoded = Encoder.encodeCanvas(canvas, pageColor, direction);
-  } else {
-    encoded = Encoder.encodeCanvas(canvas, direction);
-  }
 
   /*
-    W nowszym API EncodedImage posiada pageColor. Jeżeli konkretna wersja
-    go nie ustawiła, ustawiamy single-color — bez monkey-patchowania klas.
+    Nie przekazujemy "black" jako direction.
+    Direction = top / left.
   */
+
+  if (
+    Encoder.encodeCanvas.length >= 3
+  ) {
+
+    encoded =
+      Encoder.encodeCanvas(
+        canvas,
+        pageColor,
+        direction
+      );
+
+  } else {
+
+    encoded =
+      Encoder.encodeCanvas(
+        canvas,
+        direction
+      );
+
+  }
+
+
+  /*
+    Ustawienie pageColor tylko jeśli
+    biblioteka nie zrobiła tego sama.
+  */
+
   if (
     encoded &&
-    encoded.pageColor === undefined &&
-    pageColor !== undefined
+    encoded.pageColor ===
+      undefined &&
+    pageColor !==
+      undefined
   ) {
-    encoded.pageColor = pageColor;
+
+    encoded.pageColor =
+      pageColor;
+
   }
+
 
   if (!encoded) {
-    throw new Error("Encoder zwrócił pusty EncodedImage.");
+
+    throw new Error(
+      "Encoder zwrócił pusty EncodedImage."
+    );
+
   }
 
-  log("EncodedImage:", {
-    cols: encoded.cols,
-    rows: encoded.rows,
-    rowsData: encoded.rowsData?.length,
-    pageColor: encoded.pageColor
-  });
+
+  log(
+    "EncodedImage:",
+    {
+      cols:
+        encoded.cols,
+
+      rows:
+        encoded.rows,
+
+      rowsData:
+        encoded.rowsData?.length,
+
+      pageColor:
+        encoded.pageColor
+    }
+  );
+
 
   return encoded;
+
 }
+
 
 /* ============================================================
-   UTWORZENIE PRINT TASK
+   PRINT TASK
    ============================================================ */
 
-function createPrintTask(taskName, options) {
-  if (!client) throw new Error("Brak klienta NIIMBOT.");
+function createPrintTask(
+  taskName,
+  options
+) {
 
-  log("Tworzenie PrintTask:", { taskName, options });
+  if (!client) {
+
+    throw new Error(
+      "Brak klienta NIIMBOT."
+    );
+
+  }
+
+
+  log(
+    "Tworzenie PrintTask:",
+    {
+      taskName,
+      options
+    }
+  );
+
 
   /*
-    Aktualny przykład NiimBlueLib używa:
-      client.protocol.newPrintTask(...)
-    Starsza wersja, którą mieliśmy wcześniej, używała:
-      client.abstraction.newPrintTask(...)
+    Preferowana metoda.
   */
 
-  if (client.protocol && typeof client.protocol.newPrintTask === "function") {
-    log("Używam client.protocol.newPrintTask().");
-    return client.protocol.newPrintTask(taskName, options);
+  if (
+    client.protocol &&
+    typeof client.protocol
+      .newPrintTask ===
+      "function"
+  ) {
+
+    log(
+      "Używam client.protocol.newPrintTask()."
+    );
+
+
+    return client.protocol
+      .newPrintTask(
+        taskName,
+        options
+      );
+
   }
 
-  if (client.abstraction && typeof client.abstraction.newPrintTask === "function") {
-    log("Używam client.abstraction.newPrintTask() — fallback.");
-    return client.abstraction.newPrintTask(taskName, options);
+
+  /*
+    Fallback dla starszego API.
+  */
+
+  if (
+    client.abstraction &&
+    typeof client.abstraction
+      .newPrintTask ===
+      "function"
+  ) {
+
+    log(
+      "Używam client.abstraction.newPrintTask() — fallback."
+    );
+
+
+    return client.abstraction
+      .newPrintTask(
+        taskName,
+        options
+      );
+
   }
+
 
   throw new Error(
-    "Nie znaleziono client.protocol.newPrintTask() ani " +
+
+    "Nie znaleziono " +
+
+    "client.protocol.newPrintTask() " +
+
+    "ani " +
+
     "client.abstraction.newPrintTask(). " +
+
     "To jest niezgodność wersji NiimBlueLib."
+
   );
+
 }
+
 
 /* ============================================================
    TEST DRUKARKI
    ============================================================ */
 
 function drawTestLabel() {
-  const ctx = labelCanvas.getContext("2d");
 
-  ctx.fillStyle = "white";
-  ctx.fillRect(0, 0, LABEL_W, LABEL_H);
+  const ctx =
+    labelCanvas.getContext(
+      "2d"
+    );
 
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(2, 2, LABEL_W - 4, LABEL_H - 4);
 
-  ctx.fillStyle = "black";
-  ctx.font = "bold 40px Arial";
-  ctx.fillText("NIIMBOT TEST", 40, 70);
+  ctx.fillStyle =
+    "white";
 
-  ctx.font = "24px Arial";
-  ctx.fillText("BUTELKOBUS B3S_P", 40, 110);
 
-  ctx.font = "20px Arial";
-  ctx.fillText("586 x 240 px", 40, 145);
+  ctx.fillRect(
+    0,
+    0,
+    LABEL_W,
+    LABEL_H
+  );
 
-  ctx.font = "18px Arial";
-  ctx.fillText(new Date().toLocaleString("pl-PL"), 40, 180);
 
-  ctx.fillRect(420, 45, 100, 100);
-  ctx.clearRect(445, 70, 50, 50);
+  ctx.strokeStyle =
+    "black";
+
+
+  ctx.lineWidth =
+    3;
+
+
+  ctx.strokeRect(
+    2,
+    2,
+    LABEL_W - 4,
+    LABEL_H - 4
+  );
+
+
+  ctx.fillStyle =
+    "black";
+
+
+  ctx.font =
+    "bold 40px Arial";
+
+
+  ctx.fillText(
+    "NIIMBOT TEST",
+    40,
+    70
+  );
+
+
+  ctx.font =
+    "24px Arial";
+
+
+  ctx.fillText(
+    "BUTELKOBUS B3S_P",
+    40,
+    110
+  );
+
+
+  ctx.font =
+    "20px Arial";
+
+
+  ctx.fillText(
+    "586 x 240 px",
+    40,
+    145
+  );
+
+
+  ctx.font =
+    "18px Arial";
+
+
+  ctx.fillText(
+    new Date().toLocaleString(
+      "pl-PL"
+    ),
+    40,
+    180
+  );
+
+
+  ctx.fillRect(
+    420,
+    45,
+    100,
+    100
+  );
+
+
+  ctx.clearRect(
+    445,
+    70,
+    50,
+    50
+  );
+
 }
 
-async function printCanvas(canvas, description) {
-  if (!client) throw new Error("Drukarka nie jest połączona.");
 
-  const taskName = $("taskSelect").value;
-  const quantity = Math.max(1, Math.min(20, Number($("copies").value) || 1));
-  const density = Number($("density").value) || 3;
+/* ============================================================
+   DRUKOWANIE
+   ============================================================ */
 
-  log("================================================");
-  log("START DRUKU: " + description);
-  log("Task:", taskName);
-  log("Kopie:", quantity);
-  log("Gęstość:", density);
-  log("Kierunek:", $("direction").value);
+async function printCanvas(
+  canvas,
+  description
+) {
 
-  const encoded = encodeForPrinter(canvas);
+  if (!client) {
+
+    throw new Error(
+      "Drukarka nie jest połączona."
+    );
+
+  }
+
+
+  const taskName =
+    $("taskSelect").value;
+
+
+  const quantity =
+    Math.max(
+      1,
+      Math.min(
+        20,
+        Number(
+          $("copies").value
+        ) || 1
+      )
+    );
+
+
+  const density =
+    Number(
+      $("density").value
+    ) || 3;
+
+
+  log(
+    "================================================"
+  );
+
+
+  log(
+    "START DRUKU: " +
+    description
+  );
+
+
+  log(
+    "Task:",
+    taskName
+  );
+
+
+  log(
+    "Kopie:",
+    quantity
+  );
+
+
+  log(
+    "Gęstość:",
+    density
+  );
+
+
+  log(
+    "Kierunek:",
+    $("direction").value
+  );
+
+
+  const encoded =
+    encodeForPrinter(
+      canvas
+    );
+
 
   const options = {
-    totalPages: quantity,
-    statusPollIntervalMs: 100,
-    statusTimeoutMs: 10000,
+
+    totalPages:
+      quantity,
+
+    statusPollIntervalMs:
+      100,
+
+    statusTimeoutMs:
+      10000,
+
     pageColor:
-      window.niimbluelib.PageColorType?.SingleColor ?? 0,
-    density: density
+      window.niimbluelib
+        .PageColorType
+        ?.SingleColor ??
+      0,
+
+    density:
+      density
+
   };
 
-  const printTask = createPrintTask(taskName, options);
 
-  log("PrintTask utworzony:", {
-    constructor: printTask?.constructor?.name,
-    methods: printTask
-      ? Object.getOwnPropertyNames(Object.getPrototypeOf(printTask))
-      : []
-  });
+  const printTask =
+    createPrintTask(
+      taskName,
+      options
+    );
 
-  let initOK = false;
-  let pageOK = false;
+
+  log(
+    "PrintTask utworzony:",
+    {
+
+      constructor:
+        printTask
+          ?.constructor
+          ?.name,
+
+      methods:
+        printTask
+
+          ? Object.getOwnPropertyNames(
+              Object.getPrototypeOf(
+                printTask
+              )
+            )
+
+          : []
+
+    }
+  );
+
+
+  let initOK =
+    false;
+
+
+  let pageOK =
+    false;
+
 
   try {
-    setGlobalStatus("Inicjalizacja druku…", "warn");
-    log("→ printInit()");
-    await printTask.printInit();
-    initOK = true;
-    log("✅ printInit() OK");
 
-    setGlobalStatus("Wysyłam obraz do drukarki…", "warn");
-    log("→ printPage(encoded, quantity)");
-    await printTask.printPage(encoded, quantity);
-    pageOK = true;
-    log("✅ printPage() OK");
-
-    /*
-      W aktualnym przykładzie biblioteki istnieje waitForPageFinished().
-      Starsze warianty mogą go nie mieć.
-    */
-    if (typeof printTask.waitForPageFinished === "function") {
-      log("→ waitForPageFinished()");
-      await printTask.waitForPageFinished();
-      log("✅ waitForPageFinished() OK");
-    } else {
-      log("ℹ️ waitForPageFinished() brak — pomijam.");
-    }
-
-    log("→ waitForFinished()");
-    await printTask.waitForFinished();
-    log("✅ waitForFinished() OK");
-
-    setGlobalStatus("DRUK ZAKOŃCZONY POMYŚLNIE", "ok");
-    log("🎉 DRUK ZAKOŃCZONY POMYŚLNIE.");
-  } catch (e) {
-    logError(
-      "DRUK NIEUDANY" +
-      ` [init=${initOK}, page=${pageOK}]`,
-      e
+    setGlobalStatus(
+      "Inicjalizacja druku…",
+      "warn"
     );
-    throw e;
-  } finally {
-    /*
-      printEnd() powinien zostać wykonany, jeśli jest dostępny.
-      Robimy to nawet po błędzie, żeby poprawnie zamknąć zadanie.
-    */
-    if (printTask && typeof printTask.printEnd === "function") {
-      try {
-        log("→ printEnd()");
-        await printTask.printEnd();
-        log("✅ printEnd() OK");
-      } catch (e) {
-        logError("printEnd()", e);
-      }
+
+
+    log(
+      "→ printInit()"
+    );
+
+
+    await printTask.printInit();
+
+
+    initOK =
+      true;
+
+
+    log(
+      "✅ printInit() OK"
+    );
+
+
+    setGlobalStatus(
+      "Wysyłam obraz do drukarki…",
+      "warn"
+    );
+
+
+    log(
+      "→ printPage(encoded, quantity)"
+    );
+
+
+    await printTask.printPage(
+      encoded,
+      quantity
+    );
+
+
+    pageOK =
+      true;
+
+
+    log(
+      "✅ printPage() OK"
+    );
+
+
+    if (
+      typeof printTask
+        .waitForPageFinished ===
+      "function"
+    ) {
+
+      log(
+        "→ waitForPageFinished()"
+      );
+
+
+      await printTask
+        .waitForPageFinished();
+
+
+      log(
+        "✅ waitForPageFinished() OK"
+      );
+
     } else {
-      log("ℹ️ printEnd() nie jest dostępne w tym PrintTask.");
+
+      log(
+        "ℹ️ waitForPageFinished() brak — pomijam."
+      );
+
     }
+
+
+    log(
+      "→ waitForFinished()"
+    );
+
+
+    await printTask
+      .waitForFinished();
+
+
+    log(
+      "✅ waitForFinished() OK"
+    );
+
+
+    setGlobalStatus(
+      "DRUK ZAKOŃCZONY POMYŚLNIE",
+      "ok"
+    );
+
+
+    log(
+      "🎉 DRUK ZAKOŃCZONY POMYŚLNIE."
+    );
+
+
+  } catch (e) {
+
+    logError(
+
+      "DRUK NIEUDANY" +
+
+      ` [init=${initOK}, page=${pageOK}]`,
+
+      e
+
+    );
+
+
+    throw e;
+
+
+  } finally {
+
+
+    if (
+      printTask &&
+      typeof printTask
+        .printEnd ===
+      "function"
+    ) {
+
+      try {
+
+        log(
+          "→ printEnd()"
+        );
+
+
+        await printTask
+          .printEnd();
+
+
+        log(
+          "✅ printEnd() OK"
+        );
+
+
+      } catch (e) {
+
+        logError(
+          "printEnd()",
+          e
+        );
+
+      }
+
+    } else {
+
+      log(
+        "ℹ️ printEnd() nie jest dostępne w tym PrintTask."
+      );
+
+    }
+
   }
+
 }
 
-$("testPrintBtn").onclick = async () => {
-  const oldReceipt = currentReceipt;
 
-  try {
-    drawTestLabel();
-    await printCanvas(labelCanvas, "TEST B3S_P");
-  } catch (e) {
-    logError("TEST DRUKARKI", e);
-  } finally {
-    if (oldReceipt) {
-      await drawLabel(oldReceipt);
+/* ============================================================
+   TEST DRUKARKI
+   ============================================================ */
+
+$("testPrintBtn").onclick =
+  async () => {
+
+    const oldReceipt =
+      currentReceipt;
+
+
+    try {
+
+      drawTestLabel();
+
+
+      await printCanvas(
+        labelCanvas,
+        "TEST B3S_P"
+      );
+
+
+    } catch (e) {
+
+      logError(
+        "TEST DRUKARKI",
+        e
+      );
+
+
+    } finally {
+
+      if (oldReceipt) {
+
+        await drawLabel(
+          oldReceipt
+        );
+
+      }
+
     }
-  }
-};
 
-$("printBtn").onclick = async () => {
-  if (!currentReceipt) {
-    setGlobalStatus("Najpierw pobierz ostatni paragon.", "warn");
-    log("⚠️ Próba druku bez danych paragonu.");
-    return;
-  }
+  };
 
-  try {
-    await drawLabel(currentReceipt);
-    await printCanvas(labelCanvas, "ETYKIETA PARAGONU " + currentReceipt.customId);
-  } catch (e) {
-    logError("DRUK ETYKIETY", e);
-  }
-};
+
+/* ============================================================
+   DRUK ETYKIETY
+   ============================================================ */
+
+$("printBtn").onclick =
+  async () => {
+
+    if (!currentReceipt) {
+
+      setGlobalStatus(
+        "Najpierw pobierz ostatni paragon.",
+        "warn"
+      );
+
+
+      log(
+        "⚠️ Próba druku bez danych paragonu."
+      );
+
+
+      return;
+
+    }
+
+
+    try {
+
+      await drawLabel(
+        currentReceipt
+      );
+
+
+      await printCanvas(
+
+        labelCanvas,
+
+        "ETYKIETA PARAGONU " +
+        currentReceipt.customId
+
+      );
+
+
+    } catch (e) {
+
+      logError(
+        "DRUK ETYKIETY",
+        e
+      );
+
+    }
+
+  };
+
 
 /* ============================================================
    LOG UI
    ============================================================ */
 
-$("clearLog").onclick = () => {
-  $("log").value = "";
-  log("Log wyczyszczony.");
-};
+$("clearLog").onclick =
+  () => {
 
-$("copyLog").onclick = async () => {
-  try {
-    await navigator.clipboard.writeText($("log").value);
-    log("Log skopiowany do schowka.");
-  } catch (e) {
-    logError("Kopiowanie logu", e);
-  }
-};
+    $("log").value =
+      "";
+
+
+    log(
+      "Log wyczyszczony."
+    );
+
+  };
+
+
+$("copyLog").onclick =
+  async () => {
+
+    try {
+
+      await navigator
+        .clipboard
+        .writeText(
+          $("log").value
+        );
+
+
+      log(
+        "Log skopiowany do schowka."
+      );
+
+
+    } catch (e) {
+
+      logError(
+        "Kopiowanie logu",
+        e
+      );
+
+    }
+
+  };
+
 
 /* ============================================================
    START
    ============================================================ */
 
 (async function init() {
+
   loadSettings();
 
-  log("================================================");
-  log("BUTELKOBUS PANEL START");
-  log("Canvas:", `${LABEL_W}×${LABEL_H}`);
-  log("User agent:", navigator.userAgent);
-  log("Web Bluetooth:", "bluetooth" in navigator ? "TAK" : "NIE");
+
+  log(
+    "================================================"
+  );
+
+
+  log(
+    "BUTELKOBUS PANEL START"
+  );
+
+
+  log(
+    "Canvas:",
+    `${LABEL_W}×${LABEL_H}`
+  );
+
+
+  log(
+    "User agent:",
+    navigator.userAgent
+  );
+
+
+  log(
+    "Web Bluetooth:",
+    "bluetooth" in navigator
+      ? "TAK"
+      : "NIE"
+  );
+
 
   try {
+
     libraryCheck();
-    setGlobalStatus("Panel gotowy. Najpierw połącz NIIMBOT.", "warn");
+
+
+    setGlobalStatus(
+      "Panel gotowy. Najpierw połącz NIIMBOT.",
+      "warn"
+    );
+
+
   } catch (e) {
-    logError("Start biblioteki", e);
+
+    logError(
+      "Start biblioteki",
+      e
+    );
+
   }
 
-  /* Początkowy podgląd */
+
+  /*
+    Początkowy podgląd testowy.
+  */
+
   if (!currentReceipt) {
+
     drawTestLabel();
+
   }
+
 })();
+
 </script>
+
 </body>
 </html>
