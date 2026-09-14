@@ -12,17 +12,17 @@
     #btnPrint:disabled { background: #555; cursor: not-allowed; }
     input { padding: 12px; font-size: 18px; width: 80%; max-width: 300px; text-align: center; margin-bottom: 10px; }
     #canvas { background: white; margin: 20px auto; display: block; border: 2px solid #555; }
-    #log { text-align: left; background: #000; color: #0f0; padding: 10px; font-family: monospace; height: 200px; overflow-y: scroll; font-size: 12px; }
+    #log { text-align: left; background: #000; color: #0f0; padding: 10px; font-family: monospace; height: 250px; overflow-y: scroll; font-size: 12px; }
   </style>
 </head>
 <body>
 
-  <h2>TEST DRUKARKI (CZYSTE KONTO)</h2>
+  <h2>TEST DRUKARKI (CZYSTE KONTO 2.0)</h2>
   
   <button id="btnConnect">1. POŁĄCZ</button>
   <br>
   
-  <input type="text" id="textInput" value="TEST 123">
+  <input type="text" id="textInput" value="TEST BUTELKOBUS">
   <br>
   
   <button id="btnPrint" disabled>2. DRUKUJ NAPIS</button>
@@ -31,7 +31,6 @@
 
   <div id="log">Czekam na start...</div>
 
-  <!-- Ładujemy czysty moduł ESM, tak jak w nowym Vue/Vite -->
   <script type="module">
     import * as niimblue from 'https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/+esm';
 
@@ -53,11 +52,30 @@
         await printerClient.connect();
         
         logger("Pobieranie info z drukarki...");
-        await printerClient.fetchPrinterInfo();
+        await printerClient.fetchPrinterInfo().catch(() => logger("Ostrzeżenie: Drukarka milczy przy info."));
         
         const info = printerClient.getPrinterInfo();
-        logger(`✅ POŁĄCZONO! Model: ${info?.modelName}`);
-        logger(`Wykryty silnik: ${printerClient.getPrintTaskType()}`);
+        logger(`✅ POŁĄCZONO! Model: ${info?.modelName || 'Nieznany (Wymuszamy B3S)'}`);
+        
+        // --- KLUCZOWA ŁATKA KOMUNIKACJI (MONKEY PATCH) ---
+        if (typeof printerClient.sendAll !== "function") {
+            logger("Wstrzykiwanie naprawionego protokołu wysyłania (sendAll)...");
+            printerClient.sendAll = async function(packets) {
+                if (!Array.isArray(packets)) packets = [packets];
+                for (let pkt of packets) {
+                    // Znajdujemy prawdziwą, ukrytą funkcję wysyłającą
+                    if (typeof this.sendPacket === "function") {
+                        await this.sendPacket(pkt);
+                    } else if (this.channel && typeof this.channel.send === "function") {
+                        await this.channel.send(pkt);
+                    } else {
+                        throw new Error("Krytyczny brak kanału wysyłania (channel.send)!");
+                    }
+                    // Bluetooth nie lubi pośpiechu
+                    await new Promise(r => setTimeout(r, 10)); 
+                }
+            };
+        }
         
         document.getElementById('btnPrint').disabled = false;
       } catch (err) {
@@ -67,6 +85,9 @@
 
     // 2. DRUKOWANIE
     document.getElementById('btnPrint').onclick = async () => {
+      // Zapisujemy oryginalną funkcję tablicy przed jej wyłączeniem
+      const origIncludes = Array.prototype.includes;
+
       try {
         const text = document.getElementById('textInput').value;
         const canvas = document.getElementById('canvas');
@@ -81,41 +102,44 @@
 
         logger("Kodowanie obrazu...");
         const encoded = niimblue.ImageEncoder.encodeCanvas(canvas);
+        encoded.color = "black";
         
-        // Dynamicznie wyciągamy task type i szukamy odpowiedniej klasy w module
-        const taskTypeName = printerClient.getPrintTaskType() || "B21V1";
-        const TaskClass = niimblue[taskTypeName + "PrintTask"];
+        logger(`Tworzenie zadania dla silnika B21V1...`);
+        const TaskClass = niimblue.B21V1PrintTask;
         
-        logger(`Tworzenie zadania: ${taskTypeName}PrintTask`);
-        
-        if (!TaskClass) {
-            throw new Error(`Brak klasy ${taskTypeName}PrintTask w module!`);
-        }
-
         const printTask = new TaskClass(printerClient, {
           totalPages: 1,
-          labelType: 3 // 3 = Continuous (Rolka ciągła)
+          labelType: 3 // 3 = Rolka ciągła
         });
 
-        logger("Inicjalizacja głowicy...");
+        // --- KLUCZOWA ŁATKA KOLORU (NUKLEARNA) ---
+        // Ponieważ drukarka nie podała swojego modelu, tablica dozwolonych kolorów jest pusta.
+        // Oślepiamy przeglądarkę, żeby przepuściła czarny kolor mimo wszystko.
+        Array.prototype.includes = function(val) {
+           if (val === 'black' || val === undefined || val === 1) return true;
+           return origIncludes.apply(this, arguments);
+        };
+
+        if (typeof printTask.isColorSupported === 'function') printTask.isColorSupported = () => true;
+        if (typeof printTask.isSupportedColor === 'function') printTask.isSupportedColor = () => true;
+
+        logger("Inicjalizacja głowicy (printInit)...");
         await printTask.printInit();
 
-        logger("Wysyłanie danych do wydruku...");
-        // Wysłanie z opcją 1 (jedna kopia). Żadnego ruszania kolorów.
+        logger("Wysyłanie pikseli do grzałki...");
         await printTask.printPage(encoded, 1);
 
         logger("Oczekiwanie na koniec...");
         await printTask.waitForFinished();
         
         logger("✅ WYDRUKOWANO!");
-        
-        await printerClient.printEnd().catch(() => {});
       } catch (err) {
         logger("❌ BŁĄD DRUKU: " + err.message);
-        
-        // Zrzut awaryjny obieków, żebyśmy widzieli w logach co się kryje w środku
-        if (err.message.includes("sendAll")) {
-            logger("Szczegóły obiektu: " + Object.keys(printerClient).join(", "));
+      } finally {
+        // Zawsze przywracamy pamięć przeglądarce
+        Array.prototype.includes = origIncludes;
+        if (printerClient && typeof printerClient.printEnd === 'function') {
+           await printerClient.printEnd().catch(() => {});
         }
       }
     };
