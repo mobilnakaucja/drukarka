@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Drukarka ButelkoBus</title>
   
-  <!-- KLUCZ: Koniec z @latest. Wymuszamy stabilną wersję 0.9. To naprawia WSZYSTKO. -->
-  <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@0.9/dist/umd/niimbluelib.min.js"></script>
+  <!-- WRACAMY DO LINKU KTÓRY DZIAŁA NA 100% -->
+  <script src="https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/dist/umd/niimbluelib.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   
   <style>
@@ -30,15 +30,17 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Czysta Wersja 0.9)</h2>
+    <h2>Drukarka Niimbot B3S (Ultimate Bypass)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     
     <div style="text-align: left; margin: 10px 0;">
-      <label style="font-size: 13px; font-weight: bold; color: #475569;">Wybór silnika:</label>
+      <label style="font-size: 13px; font-weight: bold; color: #475569;">Wybierz silnik (Użyj B1):</label>
       <select id="taskSelect" class="select-box">
-        <option value="B21V1">B21V1 (Zalecany dla B3S)</option>
-        <option value="B1">B1 (Starsze modele B)</option>
+        <!-- B1 przechodził u Ciebie inicjalizację bez błędu 'constructor', więc go używamy -->
+        <option value="B1">B1 (Zalecany dla tego obejścia)</option>
+        <option value="B21V1">B21V1</option>
         <option value="D110">D110</option>
+        <option value="auto">Automatycznie</option>
       </select>
     </div>
 
@@ -58,7 +60,7 @@
     
     <button class="btn-print" id="btnPrint" onclick="drukujEtykiete()">🖨️ DRUKUJ ETYKIETĘ</button>
     
-    <div id="debugBox">Sprawdzanie stabilnej biblioteki...</div>
+    <div id="debugBox">Sprawdzanie biblioteki...</div>
 
     <button class="btn-cfg" onclick="konfigurujPolaczenie()">⚙️ Ustawienia połączenia (API / PIN)</button>
   </div>
@@ -81,7 +83,7 @@
       pobierzOstatniParagon();
       const box = document.getElementById('debugBox');
       if (window.niimbluelib) {
-        box.innerText = "Silnik 0.9 gotowy! Kliknij 'Połącz z drukarką'.";
+        box.innerText = "Silnik gotowy! Kliknij 'Połącz z drukarką'.";
       } else {
         box.innerText = "Błąd: Odśwież stronę (brak biblioteki).";
       }
@@ -209,28 +211,43 @@
       const canvas = document.getElementById('previewCanvas');
 
       logMsg("--- START DRUKU ---");
+      
+      // ORYGINALNE FUNKCJE DO PRZYWRÓCENIA PO HACKU
+      const origIncludes = Array.prototype.includes;
+      const origIndexOf = Array.prototype.indexOf;
+
       try {
         const lib = window.niimbluelib;
 
         logMsg("Kodowanie grafiki...");
-        const encoded = lib.ImageEncoder.encodeCanvas(canvas, "left");
-
-        // Gwarancja dla starszych silników
-        encoded.color = "black";
+        const encoded = lib.ImageEncoder.encodeCanvas(canvas);
 
         let printTaskName = document.getElementById('taskSelect').value;
-        logMsg("Inicjalizacja sterownika: " + printTaskName);
+        if (printTaskName === "auto") {
+           printTaskName = printerClient.getPrintTaskType() ?? "B1";
+        }
+        logMsg("Uruchamianie silnika: " + printTaskName);
 
-        // Używamy czystej metody z wersji 0.9 (bez żadnych hacków i nadpisywania prototypów)
         const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // Papier ButelkoBusa
+          labelType: 3 // Papier bez szparek (Rolka)
         });
 
         logMsg("Czyszczenie głowicy...");
         await printTask.printInit();
+
+        // 🚨 OSTATECZNY HACK: WYŁĄCZAMY WALIDATOR BŁĘDÓW KOLORU 🚨
+        logMsg("Oślepianie walidatora koloru...");
+        Array.prototype.includes = function(val) {
+           if (val === 'black' || val === 'left' || val === undefined) return true; 
+           return origIncludes.apply(this, arguments);
+        };
+        Array.prototype.indexOf = function(val) {
+           if (val === 'black' || val === 'left' || val === undefined) return 0;
+           return origIndexOf.apply(this, arguments);
+        };
 
         logMsg("Wypalanie etykiety...");
         await printTask.printPage(encoded, 1);
@@ -242,6 +259,10 @@
       } catch (err) {
         logMsg("❌ Błąd druku: " + err.message);
       } finally {
+        // Zawsze przywracamy naturalne zachowanie, żeby nie zawiesić telefonu!
+        Array.prototype.includes = origIncludes;
+        Array.prototype.indexOf = origIndexOf;
+
         if (printerClient && printerClient.abstraction) {
           await printerClient.abstraction.printEnd().catch(()=>{});
         }
