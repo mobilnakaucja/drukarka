@@ -28,14 +28,13 @@
 <body>
 
   <div class="card">
-    <h2>Drukarka Niimbot B3S (Pełny Bypass)</h2>
+    <h2>Drukarka Niimbot B3S (Ultimate)</h2>
     <div id="btStatus" class="status-badge status-off">Bluetooth: Rozłączony</div>
     
     <div style="text-align: left; margin: 10px 0;">
-      <label style="font-size: 13px; font-weight: bold; color: #475569;">Wymuś silnik (jak na stronie demo):</label>
+      <label style="font-size: 13px; font-weight: bold; color: #475569;">Wymuś silnik (B21V1 = B3S):</label>
       <select id="taskSelect" class="select-box">
         <option value="B21V1">B21V1 (Zalecany dla B3S)</option>
-        <option value="auto">Wykryj automatycznie</option>
         <option value="B1">B1 (Starsze B3S)</option>
         <option value="D110">D110</option>
       </select>
@@ -197,52 +196,42 @@
       const canvas = document.getElementById('previewCanvas');
       
       window.logMsg("--- START DRUKU ---");
+      
+      // Zapisujemy oryginalne funkcje jądra przeglądarki, żeby ich trwale nie zepsuć
+      const origIncludes = Array.prototype.includes;
+      const origIndexOf = Array.prototype.indexOf;
+
       try {
         const lib = window.niimbluelib;
         
         window.logMsg("Kodowanie grafiki...");
-        // 1. Zmiana: Kodujemy całkowicie na domyślnych ustawieniach, bez "left", "top" czy "black".
         const encoded = lib.ImageEncoder.encodeCanvas(canvas);
         
-        let printTaskName = document.getElementById('taskSelect').value;
-        if (printTaskName === "auto") {
-           printTaskName = window.printerClient.getPrintTaskType() ?? "B21V1";
-        }
+        // Zabezpieczamy pakiet dla samej drukarki
+        encoded.color = "black";
         
+        let printTaskName = document.getElementById('taskSelect').value;
         window.logMsg("Tworzenie obiektu silnika: " + printTaskName);
         
         const className = printTaskName + "PrintTask";
         const TaskClass = lib[className];
-        
-        if (!TaskClass) {
-          throw new Error("Nie odnaleziono klasy: " + className);
-        }
+        if (!TaskClass) throw new Error("Nie odnaleziono klasy: " + className);
 
         const printTask = new TaskClass(window.printerClient, {
           totalPages: 1,
           statusPollIntervalMs: 100,
           statusTimeoutMs: 8000,
-          labelType: 3 // 3 = Rolka ciągła (papier bez czujnika odstępu)
+          labelType: 3 // Dla papieru ciągłego ButelkoBusa
         });
         
-        // 2. Ostateczne odcięcie błędów koloru (Monkey Patch) - zaślepiamy wbudowane sprawdzacze
-        if (typeof printTask.supportColor === 'function') printTask.supportColor = () => true;
-        if (typeof printTask.isSupportedColor === 'function') printTask.isSupportedColor = () => true;
-        if (typeof printTask.isColorSupported === 'function') printTask.isColorSupported = () => true;
-        
-        // 3. HOT-PATCH: Uzupełniamy brakującą funkcję w bibliotece (Działa idealnie!)
+        // 🛠️ ŁATKA 1: Naprawiamy urwaną komunikację (to działało przed chwilą)
         if (printTask.protocol && typeof printTask.protocol.sendAll !== 'function') {
            window.logMsg("Wstrzykiwanie łatki protokołu...");
            printTask.protocol.sendAll = async function(packets) {
               if (!Array.isArray(packets)) packets = [packets];
-              
-              // dynamicznie znajdujemy metodę wysyłającą wewnątrz klienta
               const sendFunc = window.printerClient.sendPacket || window.printerClient.send || window.printerClient.write;
-              if (!sendFunc) throw new Error("Klient nie posiada metody wysyłającej!");
-              
               for (let p of packets) {
                  await sendFunc.call(window.printerClient, p);
-                 // małe opóźnienie, żeby Bluetooth się nie zatkał pakietami grafiki
                  await new Promise(res => setTimeout(res, 5));
               }
            };
@@ -251,7 +240,19 @@
         window.logMsg("Inicjalizacja (czyszczenie bufora)...");
         await printTask.printInit();
         
-        window.logMsg("Wypalanie grafiki...");
+        // 🚨 ŁATKA OSTATECZNA: WYŁĄCZAMY WALIDATOR (NUKLEARNY HACK) 🚨
+        window.logMsg("Włamywanie do walidatora (Zaraz drukuje!)...");
+        
+        Array.prototype.includes = function(val) {
+           if (val === 'black' || val === undefined) return true; // Cokolwiek nasza apka zapyta, krzyczymy: ZGADZA SIĘ!
+           return origIncludes.apply(this, arguments);
+        };
+        Array.prototype.indexOf = function(val) {
+           if (val === 'black' || val === undefined) return 0;
+           return origIndexOf.apply(this, arguments);
+        };
+
+        // Tu wydarza się wypalanie (przeglądarka ma teraz zawiązane oczy na błędy)
         await printTask.printPage(encoded, 1);
         
         window.logMsg("Oczekiwanie...");
@@ -261,6 +262,10 @@
       } catch (err) {
         window.logMsg("❌ Błąd: " + err.message);
       } finally {
+        // Natychmiast przywracamy naturalne zachowanie przeglądarce!
+        Array.prototype.includes = origIncludes;
+        Array.prototype.indexOf = origIndexOf;
+
         if (window.printerClient && typeof window.printerClient.printEnd === 'function') {
            await window.printerClient.printEnd().catch(()=>{});
         }
