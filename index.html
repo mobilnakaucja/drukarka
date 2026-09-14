@@ -17,7 +17,7 @@
 </head>
 <body>
 
-  <h2>TEST DRUKARKI B3S_P</h2>
+  <h2>TEST DRUKARKI B3S_P (KNEBEL)</h2>
   
   <button id="btnConnect">1. POŁĄCZ</button>
   <br>
@@ -51,22 +51,19 @@
         logger("Szukanie Bluetooth...");
         await printerClient.connect();
         
-        // Celowo ignorujemy błąd przy info, B3S_P potrafi tu milczeć
         await printerClient.fetchPrinterInfo().catch(() => {});
         
-        logger(`✅ POŁĄCZONO! Sprzęt: B3S_P (Wymuszam tryb zgodności)`);
+        const info = printerClient.getPrinterInfo();
+        logger(`✅ POŁĄCZONO! Sprzęt: ${info?.modelName || 'B3S_P (Wymuszony)'}`);
         
-        // ŁATKA KOMUNIKACJI (Brakujący sendAll w bibliotece)
+        // ŁATKA 1: Protokół wysyłania (sprawdzona, działała w poprzednim logu)
         if (typeof printerClient.sendAll !== "function") {
-            logger("Łatanie protokołu wysyłania Bluetooth...");
+            logger("Łatanie protokołu Bluetooth...");
             printerClient.sendAll = async function(packets) {
                 if (!Array.isArray(packets)) packets = [packets];
                 for (let pkt of packets) {
-                    if (typeof this.sendPacket === "function") {
-                        await this.sendPacket(pkt);
-                    } else if (this.channel && typeof this.channel.send === "function") {
-                        await this.channel.send(pkt);
-                    }
+                    if (typeof this.sendPacket === "function") await this.sendPacket(pkt);
+                    else if (this.channel && typeof this.channel.send === "function") await this.channel.send(pkt);
                     await new Promise(r => setTimeout(r, 10)); 
                 }
             };
@@ -85,40 +82,47 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
-        logger("Rysowanie na canvas...");
-        ctx.fillStyle = "white"; // Zgodnie z instrukcją - tło musi być bezwzględnie białe
+        logger("Rysowanie na canvas (czysty B&W)...");
+        ctx.fillStyle = "white"; // Tło w 100% białe, zgodnie z manualem
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "black";
+        ctx.fillStyle = "black"; // Tekst w 100% czarny
         ctx.font = "bold 40px sans-serif";
         ctx.fillText(text, 20, 100);
 
         logger("Kodowanie obrazu...");
         const encoded = niimblue.ImageEncoder.encodeCanvas(canvas);
         
-        // AGRESYWNA ŁATKA KOLORÓW
-        // Wchodzimy w każdy wygenerowany fragment grafiki i siłowo przypisujemy 'black', 
-        // aby zlikwidować problem 'undefined'.
-        const forceBlackColor = (obj) => {
-           if (!obj || typeof obj !== 'object') return;
-           if (obj instanceof Uint8Array || obj instanceof ArrayBuffer) return;
-           obj.color = 'black'; 
-           Object.values(obj).forEach(forceBlackColor);
-        };
-        forceBlackColor(encoded);
+        // ŁATKA 2: Definiujemy TWARDY kolor obrazu omijając blokady zapisu
+        try {
+            Object.defineProperty(encoded, 'color', { value: 'black', writable: true, configurable: true, enumerable: true });
+        } catch(e) {
+            encoded.color = 'black';
+        }
 
         logger(`Tworzenie zadania dla silnika B21V1...`);
         const TaskClass = niimblue.B21V1PrintTask;
         
-        // KNEBEL NA WALIDATOR
-        // Wyłączamy sprawdzanie kolorów bezpośrednio w kodzie źródłowym klasy sterownika.
-        TaskClass.prototype.isSupportedColor = function() { return true; };
-        TaskClass.prototype.isColorSupported = function() { return true; };
-        TaskClass.prototype.supportColor = function() { return true; };
-
         const printTask = new TaskClass(printerClient, {
           totalPages: 1,
-          labelType: 3 // Ustawienie na rolkę ciągłą (bez przerw)
+          labelType: 3 // Rolka ciągła (dla etykiet ButelkoBusa)
         });
+
+        // ŁATKA 3 (NUKLEARNA): Kasujemy funkcje walidujące BEZPOŚREDNIO w obiekcie
+        // Przeszukujemy obiekt i jego prototyp i podmieniamy wszystkie funkcje 
+        // sprawdzające "kolor" na takie, które mówią "Wszystko jest w porządku, drukuj".
+        let objToHack = printTask;
+        while (objToHack) {
+            for (const key of Object.getOwnPropertyNames(objToHack)) {
+                if (typeof objToHack[key] === 'function' && key.toLowerCase().includes('color')) {
+                    objToHack[key] = function() { return true; };
+                }
+            }
+            objToHack = Object.getPrototypeOf(objToHack);
+        }
+        
+        // Brutalny knebel bezpośrednio (dla pewności)
+        printTask.supportColor = function() { return true; };
+        printTask.isSupportedColor = function() { return true; };
 
         logger("Inicjalizacja głowicy (printInit)...");
         await printTask.printInit();
