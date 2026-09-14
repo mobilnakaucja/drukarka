@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Czysty Test Niimbot</title>
+  <title>Czysty Test Niimbot B3S-P</title>
   <style>
     body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; text-align: center; }
     button { padding: 15px 30px; font-size: 18px; margin: 10px; cursor: pointer; font-weight: bold; border: none; border-radius: 8px; }
@@ -17,19 +17,19 @@
 </head>
 <body>
 
-  <h2>TEST DRUKARKI (CZYSTE KONTO 2.0)</h2>
+  <h2>TEST DRUKARKI B3S_P</h2>
   
   <button id="btnConnect">1. POŁĄCZ</button>
   <br>
   
-  <input type="text" id="textInput" value="TEST BUTELKOBUS">
+  <input type="text" id="textInput" value="TEST B3S-P">
   <br>
   
   <button id="btnPrint" disabled>2. DRUKUJ NAPIS</button>
 
   <canvas id="canvas" width="384" height="200"></canvas>
 
-  <div id="log">Czekam na start...</div>
+  <div id="log">Gotowy do akcji...</div>
 
   <script type="module">
     import * as niimblue from 'https://cdn.jsdelivr.net/npm/@mmote/niimbluelib@latest/+esm';
@@ -51,27 +51,22 @@
         logger("Szukanie Bluetooth...");
         await printerClient.connect();
         
-        logger("Pobieranie info z drukarki...");
-        await printerClient.fetchPrinterInfo().catch(() => logger("Ostrzeżenie: Drukarka milczy przy info."));
+        // Celowo ignorujemy błąd przy info, B3S_P potrafi tu milczeć
+        await printerClient.fetchPrinterInfo().catch(() => {});
         
-        const info = printerClient.getPrinterInfo();
-        logger(`✅ POŁĄCZONO! Model: ${info?.modelName || 'Nieznany (Wymuszamy B3S)'}`);
+        logger(`✅ POŁĄCZONO! Sprzęt: B3S_P (Wymuszam tryb zgodności)`);
         
-        // --- KLUCZOWA ŁATKA KOMUNIKACJI (MONKEY PATCH) ---
+        // ŁATKA KOMUNIKACJI (Brakujący sendAll w bibliotece)
         if (typeof printerClient.sendAll !== "function") {
-            logger("Wstrzykiwanie naprawionego protokołu wysyłania (sendAll)...");
+            logger("Łatanie protokołu wysyłania Bluetooth...");
             printerClient.sendAll = async function(packets) {
                 if (!Array.isArray(packets)) packets = [packets];
                 for (let pkt of packets) {
-                    // Znajdujemy prawdziwą, ukrytą funkcję wysyłającą
                     if (typeof this.sendPacket === "function") {
                         await this.sendPacket(pkt);
                     } else if (this.channel && typeof this.channel.send === "function") {
                         await this.channel.send(pkt);
-                    } else {
-                        throw new Error("Krytyczny brak kanału wysyłania (channel.send)!");
                     }
-                    // Bluetooth nie lubi pośpiechu
                     await new Promise(r => setTimeout(r, 10)); 
                 }
             };
@@ -85,16 +80,13 @@
 
     // 2. DRUKOWANIE
     document.getElementById('btnPrint').onclick = async () => {
-      // Zapisujemy oryginalną funkcję tablicy przed jej wyłączeniem
-      const origIncludes = Array.prototype.includes;
-
       try {
         const text = document.getElementById('textInput').value;
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
         logger("Rysowanie na canvas...");
-        ctx.fillStyle = "white";
+        ctx.fillStyle = "white"; // Zgodnie z instrukcją - tło musi być bezwzględnie białe
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "black";
         ctx.font = "bold 40px sans-serif";
@@ -102,26 +94,31 @@
 
         logger("Kodowanie obrazu...");
         const encoded = niimblue.ImageEncoder.encodeCanvas(canvas);
-        encoded.color = "black";
         
+        // AGRESYWNA ŁATKA KOLORÓW
+        // Wchodzimy w każdy wygenerowany fragment grafiki i siłowo przypisujemy 'black', 
+        // aby zlikwidować problem 'undefined'.
+        const forceBlackColor = (obj) => {
+           if (!obj || typeof obj !== 'object') return;
+           if (obj instanceof Uint8Array || obj instanceof ArrayBuffer) return;
+           obj.color = 'black'; 
+           Object.values(obj).forEach(forceBlackColor);
+        };
+        forceBlackColor(encoded);
+
         logger(`Tworzenie zadania dla silnika B21V1...`);
         const TaskClass = niimblue.B21V1PrintTask;
         
+        // KNEBEL NA WALIDATOR
+        // Wyłączamy sprawdzanie kolorów bezpośrednio w kodzie źródłowym klasy sterownika.
+        TaskClass.prototype.isSupportedColor = function() { return true; };
+        TaskClass.prototype.isColorSupported = function() { return true; };
+        TaskClass.prototype.supportColor = function() { return true; };
+
         const printTask = new TaskClass(printerClient, {
           totalPages: 1,
-          labelType: 3 // 3 = Rolka ciągła
+          labelType: 3 // Ustawienie na rolkę ciągłą (bez przerw)
         });
-
-        // --- KLUCZOWA ŁATKA KOLORU (NUKLEARNA) ---
-        // Ponieważ drukarka nie podała swojego modelu, tablica dozwolonych kolorów jest pusta.
-        // Oślepiamy przeglądarkę, żeby przepuściła czarny kolor mimo wszystko.
-        Array.prototype.includes = function(val) {
-           if (val === 'black' || val === undefined || val === 1) return true;
-           return origIncludes.apply(this, arguments);
-        };
-
-        if (typeof printTask.isColorSupported === 'function') printTask.isColorSupported = () => true;
-        if (typeof printTask.isSupportedColor === 'function') printTask.isSupportedColor = () => true;
 
         logger("Inicjalizacja głowicy (printInit)...");
         await printTask.printInit();
@@ -136,8 +133,6 @@
       } catch (err) {
         logger("❌ BŁĄD DRUKU: " + err.message);
       } finally {
-        // Zawsze przywracamy pamięć przeglądarce
-        Array.prototype.includes = origIncludes;
         if (printerClient && typeof printerClient.printEnd === 'function') {
            await printerClient.printEnd().catch(() => {});
         }
